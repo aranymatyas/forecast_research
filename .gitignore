@@ -1,0 +1,7 @@
+.venv
+python/data/
+
+*_files/
+.Renviron
+*.html
+**__pycache__/

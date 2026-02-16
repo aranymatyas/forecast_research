@@ -1,0 +1,85 @@
+---
+title: "Final Fix Test"
+format: html
+---
+
+# Title is here
+
+```{r}
+#| label: setup
+#| include: true
+
+library(reticulate)
+source("R/functions.R")
+# Imported function demo
+result <- calculate_growth(150, 100)
+print(paste("The growth rate is", result, "%"))
+
+# R Dataframe
+r_data <- data.frame(
+  id = 1:5,
+  measurement = c(10.2, 11.5, 10.8, 12.1, 11.2)
+)
+
+print("Data created in R:")
+print(r_data)
+
+
+
+```
+
+1. From R to Python
+```{python}
+import pandas as pd
+import numpy as np
+
+# Same data in python
+df_in_python = r.r_data
+
+print("Python sees the R data as a Pandas DataFrame:")
+print(df_in_python.describe())
+
+# Let's create a new column in Python
+df_in_python['log_measurement'] = df_in_python['measurement'].apply(lambda x: x**2)
+```
+
+1. From Python to R Change here
+```{r}
+# Access the Python object using 'py$variable_name'
+final_r_data <- py$df_in_python
+
+print("R now has the data modified by Python:")
+View(final_r_data) # Opens in vscode spreadsheat
+
+```
+
+
+```{r}
+# Load ggplot2 (install it first if you haven't: install.packages("ggplot2"))
+library(ggplot2)
+
+
+# Using the built-in 'economics' dataset for a forecast-style look
+ggplot(economics, aes(x = date, y = unemploy)) +
+  geom_line(color = "#2c3e50", size = 1) +
+  labs(
+    title = "Testing Internal R Graphics",
+    subtitle = "If this is in VS Code, we have achieved total success.",
+    x = "Year",
+    y = "Unemployment (thousands)"
+  ) +
+  theme_minimal()
+# Plots in new window
+```
+
+```{r}
+# Install it once: install.packages("plotly")
+library(plotly) # Same plotly as in python -> interactive in vscode
+library(ggplot2)
+
+# Create a ggplot
+p <- ggplot(economics, aes(x = date, y = unemploy)) + geom_line()
+
+# Use ggplotly to "View" it inside VS Code
+ggplotly(p)
+```
