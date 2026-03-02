@@ -1,7 +1,13 @@
 .venv
-python/data/
+data/
 
 *_files/
 .Renviron
 *.html
 **__pycache__/
+TODO.md
+
+# For now
+fareco_demo.qmd
+thief_demo.qmd
+web_traffic.qmd
