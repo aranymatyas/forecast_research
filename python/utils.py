@@ -61,20 +61,25 @@ def fetch_dataset_corpo(format: TimeSeriesFormat = "wide"):
     return X
 
 def fetch_dataset_m5(format: TimeSeriesFormat = "wide"):
-    ''' Dataset with no missing values. Many small values. Artificial dates. '''
+    ''' Dataset with no missing values. Many small values. Real dates from 2011-01-29 to 2016-06-19. '''
     with zipfile.ZipFile("data/m5/sales_train_evaluation.csv.zip", 'r') as zip_ref, \
          zip_ref.open("sales_train_evaluation.csv") as f:
         X = pd.read_csv(f)
-
+    
+    # Load calendar to get real dates
+    with zipfile.ZipFile("data/m5/calendar.csv.zip", 'r') as zip_ref, \
+         zip_ref.open("calendar.csv") as f:
+        calendar = pd.read_csv(f)
+    
     X = move_to_float32(X)
     X = X.drop(columns=['item_id', 'dept_id', 'cat_id', 'store_id', 'state_id'])
     X = X.set_index('id').T
     X = X.reset_index().rename(columns={'index': 'ds'})
     X.columns.name = None
-
-    # We have no real dates so assume some start
-    start_date = datetime(2000, 1, 1)
-    X['ds'] = pd.Series([start_date + timedelta(days=i) for i in range(len(X))])
+    
+    # Map d_1, d_2, etc. to real dates using calendar
+    date_mapping = dict(zip(calendar['d'], pd.to_datetime(calendar['date'])))
+    X['ds'] = X['ds'].map(date_mapping)
     X = X.set_index('ds')
 
     if format == "long":

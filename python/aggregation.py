@@ -7,11 +7,12 @@ from python.utils import is_long
 BASE_PERIOD = 28
 
 class Aggregation:
-    def __init__(self, hierarchy_name: str, period: int):
+    def __init__(self, hierarchy_name: str, period: int, density: float):
         if BASE_PERIOD % period != 0:
             raise ValueError(f"Interval + skip must be divisor of {BASE_PERIOD}")
         self.hierarchy_name = hierarchy_name
         self.period = period
+        self.density = density
 
     def make_summing_matrix(self, base_days: list[date]) -> pd.DataFrame:
         raise NotImplementedError
@@ -43,13 +44,20 @@ class Aggregation:
     def _select_keep_days(self, X: pd.DataFrame):
         raise NotImplementedError
 
+    @staticmethod
+    def from_summing_matrix(summing_matrix: np.ndarray, hierarchy_name: str = 'Arbitrary') -> list['Aggregation']:
+        return [ArbitraryAggregation(hierarchy_name, row) for row in summing_matrix]
+
+    def __str__(self):
+        return self.hierarchy_name
 
 class ArbitraryAggregation(Aggregation):
-    def __init__(self, hierarchy_name: str, summing_row: np.ndarray):
-        super().__init__(hierarchy_name, BASE_PERIOD)
-        if BASE_PERIOD != summing_row.shape[0]:
+    def __init__(self, hierarchy_name: str, summing_row: np.ndarray | list):
+        summing_row = np.array(summing_row, dtype=np.int32)
+        super().__init__(hierarchy_name, BASE_PERIOD, summing_row.sum() / BASE_PERIOD)
+        if (BASE_PERIOD, ) != summing_row.shape:
             raise ValueError(f'Summing row must be full length of {BASE_PERIOD}')
-        if not (set(summing_row) <= (0, 1)):
+        if not (set(summing_row) <= {0, 1}):
             raise ValueError('Summing row must only contain 0s and 1s')
         self.summing_row = summing_row
 
@@ -64,7 +72,7 @@ class ArbitraryAggregation(Aggregation):
 class PeriodicAggregation(Aggregation):
 
     def __init__(self, hierarchy_name: str, interval: int, skip: int = 0, left: bool = True):
-        super().__init__(hierarchy_name, interval + skip)
+        super().__init__(hierarchy_name, interval + skip, interval / (interval + skip))
         self.left = left # interval on the left and skip on right
         self.interval = interval
         self.skip = skip
@@ -105,6 +113,5 @@ WEEKS = PeriodicAggregation('Weeks', 7, 0, True)
 FORTNIGHTS = PeriodicAggregation('Fortnights', 14, 0, True)
 MONTHS = PeriodicAggregation('Months', 28, 0, True)
 
-_2DAYS = PeriodicAggregation('2Days', 2, 0, True)
-_4DAYS = PeriodicAggregation('4Days', 4, 0, True)
-_8DAYS1 = PeriodicAggregation('8Days', 8, 20, True)
+TWO_DAYS = PeriodicAggregation('2Days', 2, 0, True)
+FOUR_DAYS = PeriodicAggregation('4Days', 4, 0, True)
