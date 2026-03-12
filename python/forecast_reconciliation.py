@@ -1,9 +1,12 @@
 import numpy as np
+import pandas as pd
+
 import forecopy as foreco
 from typing import Literal
 
 from python.temporal_hierarchy import TemporalHierarchy
 from python.time_series import BASE_FORECASTS, RESIDUALS
+from python.aggregation import Aggregation, DAYS, MONTHS
 
 class ForecastReconciliation:
     def __init__(self, temporal_hierarchy: TemporalHierarchy):
@@ -39,3 +42,15 @@ class ForecastReconciliation:
                 reconciled_forecasts[ts_idx, h_idx, :] = reconciled
 
         self.temporal_hierarchy.store_reconciled_forecasts(reconciled_forecasts, method=method)
+
+        return self
+
+    def inconcistency_errors(self, top_level: Aggregation = MONTHS, leaf_level: Aggregation = DAYS):
+        leaf = self.temporal_hierarchy[leaf_level][BASE_FORECASTS].wide
+        top = self.temporal_hierarchy[top_level][BASE_FORECASTS].wide
+        horizon = len(top)
+
+        leaf_sum = leaf.sum(axis=0)
+        top_sum = top.sum(axis=0)
+        return pd.DataFrame((top_sum - leaf_sum) / horizon, columns=[f'{top_level} - {leaf_level}']).T
+

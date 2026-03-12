@@ -71,7 +71,7 @@ class ForecastLevel:
         return self._past_reconciled[method]
 
     def __getitem__(self, type: TimeSeriesType):
-        return self._time_series_library[type]
+        return self._time_series_library.get(type)
 
     def __setitem__(self, type: TimeSeriesType, data: pd.DataFrame | tuple[pd.DataFrame, str] | TimeSeries):
         if isinstance(data, pd.DataFrame):
@@ -80,6 +80,11 @@ class ForecastLevel:
             self._time_series_library[type] = TimeSeries(data[0], self.aggregation, data[1])
         elif isinstance(data, TimeSeries):
             self._time_series_library[type] = data
+
+    def copy_data(self, from_fl: 'ForecastLevel'):
+        self._time_series_library = from_fl._time_series_library.copy()
+        self._past_reconciled = from_fl._past_reconciled.copy()
+        return self
 
 
 class TemporalHierarchy:
@@ -124,14 +129,19 @@ class TemporalHierarchy:
             X = long_to_wide(X)
 
         for forecast_lvl in self.forecast_levels:
-            forecast_lvl.prepare_aggregation(X)
+            if forecast_lvl[FULL_DATA] is None:
+                forecast_lvl.prepare_aggregation(X)
+
+        return self
 
     def make_base_forecasts(self, h_days: int):
         ''' Makes base, independent forecasts for each aggregation level '''
         if h_days % BASE_PERIOD != 0:
             raise ValueError(f"h_days must be divisible by {BASE_PERIOD}")
         for forecast_lvl in self.forecast_levels:
-            forecast_lvl.make_forecast(h_days)
+            if forecast_lvl[BASE_FORECASTS] is None:
+                forecast_lvl.make_forecast(h_days)
+        return self
 
     def store_reconciled_forecasts(self, reconciled_forecasts: np.ndarray, method = None):
         idx = 0
@@ -175,9 +185,13 @@ class TemporalHierarchy:
             raise ValueError("Must specify either clone_suffix or clone_name")
         th = TemporalHierarchy(self.aggregations, clone_name)
         for this, copy in zip(self.forecast_levels, th.forecast_levels):
-            copy._time_series_library = this._time_series_library.copy()
-            copy._past_reconciled = this._past_reconciled.copy()
+            copy.copy_data(this)
         return th
+
+    def copy_data(self, from_th: 'TemporalHierarchy'):
+        for agg in self.aggregations:
+            self[agg].copy_data(from_th[agg])
+        return self
 
     def change_reconciled_forecasts_to(self, method: str):
         ''' Changes the reconciled forecasts to the given method. Those forecasts need to have been calculated. '''

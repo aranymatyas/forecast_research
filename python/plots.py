@@ -27,22 +27,27 @@ def plot_nans(df: pd.DataFrame):
         hovertemplate="<b>Date:</b> %{y}<br><b>Series:</b> %{x}<br><b>Status:</b> %{customdata}<extra></extra>",
         customdata=mask.replace({0: "Present", 1: "Missing"})
     )
-    return fig.show()
+    return fig
 
 
-def plot_heatmap(df: pd.DataFrame):
+def plot_heatmap(df: pd.DataFrame, log = False):
     ''' Plots the heatmap of values in the time series. Optimal for wide format. Highlights NaNs '''
     if is_long(df):
         df = long_to_wide(df)
 
-    fig = px.imshow(df, aspect='auto', title=f"Time Series Value Distribution ({len(df.columns)} Series)", color_continuous_scale="Viridis",
+    if log:
+        df_vals = np.log(df.where(df > 0))
+    else:
+        df_vals = df
+
+    fig = px.imshow(df_vals, aspect='auto', title=f"Time Series Value Distribution ({len(df.columns)} Series)", color_continuous_scale="Viridis",
                     labels=dict(x="Series", y="Date", color="Value")
     )
 
     # Set the background of the actual plotting area.
-    fig.update_layout( height=800, plot_bgcolor='red', xaxis_showticklabels=False, xaxis=dict(showgrid=False), yaxis=dict(showgrid=False))
+    fig.update_layout( height=800, plot_bgcolor='red', xaxis_showticklabels=False, yaxis=dict(showgrid=False))
 
-    return fig.show()
+    return fig
 
 
 def plot_summing_matrix(S: pd.DataFrame, height: int=700):
@@ -112,52 +117,53 @@ def plot_summing_matrix(S: pd.DataFrame, height: int=700):
         height=height
     )
 
-    return fig.show()
+    return fig
 
-def plot_forecast(th: TemporalHierarchy, lvls: list[Aggregation] = [DAYS, MONTHS], col: int | str = 1, history_days: int = 1):
+def plot_forecast(ths: list[TemporalHierarchy], lvls: list[Aggregation] = [DAYS, MONTHS], col: int | str = 1, history_days: int = 1):
     ''' Plots the actual, base and reconciled forecasts for the specified levels of the specified time series. GenAI code '''
     if isinstance(col, int):
-        col = th[lvls[0]][VALIDATION_SET].wide.columns[col]
+        col = ths[0][lvls[0]][VALIDATION_SET].wide.columns[col]
 
     fig = go.Figure()
     colors = px.colors.qualitative.Plotly
+    for th in ths:
+        for i, lvl in enumerate(lvls):
+            train = th[lvl][TRAIN_SET].wide[col]
+            validation = th[lvl][VALIDATION_SET].wide[col]
+            base = th[lvl][BASE_FORECASTS].wide[col]
+            reconciled = th[lvl][RECONCILED_FORECASTS].wide[col]
 
-    for i, lvl in enumerate(lvls):
-        train = th[lvl][TRAIN_SET].wide[col]
-        validation = th[lvl][VALIDATION_SET].wide[col]
-        base = th[lvl][BASE_FORECASTS].wide[col]
-        reconciled = th[lvl][RECONCILED_FORECASTS].wide[col]
+            color = colors[i % len(colors)]
 
-        color = colors[i % len(colors)]
+            if history_days > 0:
+                history = train.loc[train.index.max() - timedelta(days=history_days):train.index.max()]
+                actual = pd.concat([history, validation])
+            else:
+                actual = validation
 
-        if history_days > 0:
-            history = train.loc[train.index.max() - timedelta(days=history_days):train.index.max()]
-            actual = pd.concat([history, validation])
-        else:
-            actual = validation
+            x_actual = actual.index
+            x_forecast = validation.index
 
-        x_actual = actual.index
-        x_forecast = validation.index
-
-        fig.add_trace(go.Scatter(x=x_actual, y=actual, mode='lines', name=f'{lvl} - Actual', line=dict(color=color, width=2)))
-        fig.add_trace(go.Scatter(x=x_forecast, y=base, mode='lines', name=f'{lvl} - Base', line=dict(color=color, dash='dot')))
-        fig.add_trace(go.Scatter(x=x_forecast, y=reconciled, mode='lines', name=f'{lvl} - Reconciled', line=dict(color=color, dash='dash')))
+            fig.add_trace(go.Scatter(x=x_actual, y=actual, mode='lines', name=f'{th} - {lvl} - Actual', line=dict(color=color, width=2)))
+            fig.add_trace(go.Scatter(x=x_forecast, y=base, mode='lines', name=f'{th} - {lvl} - Base', line=dict(color=color, dash='dot')))
+            fig.add_trace(go.Scatter(x=x_forecast, y=reconciled, mode='lines', name=f'{lvl} - Reconciled', line=dict(color=color, dash='dash')))
 
     fig.update_layout(title=f'Forecast Comparison for Series: {col}', xaxis_title='Date', yaxis_title='Value')
-    return fig.show()
+    return fig
 
-def plot_error_distribution(em: ErrorMetrics, indeces: list[MetricsIndex], title_info: str = ''):
+def plot_error_distribution(em: ErrorMetrics, indeces: list[MetricsIndex], title_info: str = '', outlier_threshold = 0.0, bin_size = 0.15):
     ''' Plot overlapping histograms of the selected error metrics. GenAI code. '''
     fig = go.Figure()
 
     for index in indeces:
-                errors = index.values(em).flatten()
-                fig.add_trace(go.Histogram(x=errors, name=str(index), opacity=0.6))
+        errors = index.values(em).flatten()
+        errors = errors[errors < np.quantile(errors, outlier_threshold)]
+        fig.add_trace(go.Histogram(x=errors, name=str(index), opacity=0.6, histnorm='probability'))
 
-    fig.update_traces(xbins_size=0.15)
+    fig.update_traces(xbins_size=bin_size)
     title = 'Error Distribution' + f' - {title_info}' if title_info else ''
     fig.update_layout(barmode='overlay', title=title, xaxis_title='Error Value', yaxis_title='Frequency')
-    return fig.show()
+    return fig
 
 def plot_error_qq(em: ErrorMetrics, index_x: MetricsIndex, index_y: MetricsIndex, outlier_threshold = 0.0):
     ''' Plots a QQ diagram of the selected two error metrics '''
@@ -175,7 +181,7 @@ def plot_error_qq(em: ErrorMetrics, index_x: MetricsIndex, index_y: MetricsIndex
 
     fig = px.scatter(x=x, y=y, title=f'QQ-Plot ({index_x}) vs ({index_y})', labels={'x': f'{index_x}', 'y': f'{index_y}'})
     fig.add_shape(type="line", x0=min(x), y0=min(x), x1=max(x), y1=max(x), line=dict(dash='dash'))
-    return fig.show()
+    return fig
 
 def plot_error_diff(em: ErrorMetrics, index_base: MetricsIndex, index_comp: MetricsIndex, outlier_threshold = 0.0):
     ''' Plots the difference of the two selected error metrics. GenAI code. '''
@@ -187,12 +193,12 @@ def plot_error_diff(em: ErrorMetrics, index_base: MetricsIndex, index_comp: Metr
 
     df = pd.DataFrame({'base': base, 'comp': comp})
     if outlier_threshold:
-        df = df[df['base'] < np.quantile(df['base'], outlier_threshold)]
+        df = df[(df['base'] < np.quantile(df['base'], outlier_threshold)) & (df['comp'] < np.quantile(df['comp'], outlier_threshold))]
     df['diff'] = df['comp'] - df['base']
     df.sort_values('base', inplace=True)
     df['error_status'] = df['diff'] > 0
 
-    fig = px.scatter(df, x='base', y='diff', title=f'Difference in Error: {index_comp} // {index_base}',
+    fig = px.scatter(df, x='base', y='diff', title=f'Difference in Error: {index_comp} vs {index_base}',
                      labels={'base': f'Base Error - {index_base}', 'diff': f'Difference to {index_comp}'},
                      color='error_status',
                      color_discrete_map={True: '#EF553B', False: '#00CC96'})
@@ -207,7 +213,7 @@ def plot_error_diff(em: ErrorMetrics, index_base: MetricsIndex, index_comp: Metr
     fig.data = fig.data[::-1]
     fig.add_hline(y=0, line_dash="dot", line_color='red')
 
-    return fig.show()
+    return fig
 
 def plot_error_func(em: ErrorMetrics, index_x: MetricsIndex, index_y: MetricsIndex, outlier_threshold = 0.0):
     ''' Plots one error metrics in the function of another one '''
@@ -216,11 +222,129 @@ def plot_error_func(em: ErrorMetrics, index_x: MetricsIndex, index_y: MetricsInd
 
     df = pd.DataFrame({'x': x, 'y': y})
     if outlier_threshold:
-        df = df[df['x'] < np.quantile(df['x'], outlier_threshold)]
+        df = df[(df['x'] < np.quantile(df['x'], outlier_threshold)) & (df['y'] < np.quantile(df['y'], outlier_threshold))]
     df.sort_values('x', inplace=True)
 
 
     fig = px.line(df, x='x', y='y', title=f'Scatter Plot: {index_x} vs {index_y}',
                      labels={'x': f'{index_x}', 'y': f'{index_y}'})
 
-    return fig.show()
+    return fig
+
+def plot_error_strips(em: ErrorMetrics, index: MetricsIndex, symlog = False):
+    df = index.rows(em)
+
+    index_labels = [
+        " | ".join(map(str, idx)) if isinstance(idx, tuple) else str(idx)
+        for idx in df.index
+    ]
+
+    original_values = df.values.flatten()
+
+    if symlog:
+        plot_values = np.sign(original_values) * np.log1p(np.abs(original_values))
+        y_label = 'Error Value (SymLog)'
+    else:
+        plot_values = original_values
+        y_label = 'Error Value'
+
+    plot_df = pd.DataFrame({
+        y_label: plot_values,
+        'Original Error': original_values,
+        'Time Series ID': np.tile(df.columns, len(df)),
+        'Metric': np.repeat(index_labels, len(df.columns))
+    })
+
+    fig = px.strip(plot_df, x='Metric', y=y_label, color='Metric', title=f'Strip Plot: {index}',
+                   hover_data={ 'Time Series ID': True, 'Original Error': ':.4f', y_label: False,})
+
+    # Optional: Clean up the layout (hiding the x-axis title since the ticks/legend explain it)
+    fig.update_layout(xaxis_title=None)
+    fig.update_xaxes(showticklabels=False)
+
+    return fig
+
+
+def plot_error_boxes(em: ErrorMetrics, index: MetricsIndex, symlog: bool = False):
+    df = index.rows(em)
+
+    index_labels = [
+        " | ".join(map(str, idx)) if isinstance(idx, tuple) else str(idx)
+        for idx in df.index
+    ]
+
+    original_values = df.values.flatten()
+
+    if symlog:
+        plot_values = np.sign(original_values) * np.log1p(np.abs(original_values))
+        y_label = 'Error Value (SymLog)'
+    else:
+        plot_values = original_values
+        y_label = 'Error Value'
+
+    plot_df = pd.DataFrame({
+        y_label: plot_values,
+        'Original Error': original_values,
+        'Time Series ID': np.tile(df.columns, len(df)),
+        'Metric': np.repeat(index_labels, len(df.columns))
+    })
+
+    fig = px.box(plot_df, x='Metric', y=y_label, color='Metric', title=f'Box Plot: {index}',
+                 hover_data={ 'Time Series ID': True, 'Original Error': ':.4f', y_label: False,})
+
+    # 5. Clean up the x-axis
+    fig.update_layout(xaxis_title=None)
+    fig.update_xaxes(showticklabels=False)
+
+    return fig
+
+def plot_stats(stats_df: pd.DataFrame, stat: str, labels: tuple = (0,)):
+    x = [str([i[j] for j in labels]) for i in stats_df.index]
+    fig = px.bar(stats_df, x=x, y=stat, title=f'{stat} statistics')
+    fig.update_layout(xaxis_title='Method', yaxis_title=stat)
+    return fig
+
+def plot_error_heatmap(em: ErrorMetrics, x_index: MetricsIndex, y_index: MetricsIndex, bins=15, outlier_threshold=0.0):
+    x = x_index.rows(em).values.flatten()
+    y = y_index.rows(em).values.flatten()
+
+    if outlier_threshold:
+        mask = (x < np.quantile(x, outlier_threshold)) & (y < np.quantile(y, outlier_threshold))
+        x = x[mask]
+        y = y[mask]
+
+
+    heatmap, xedges, yedges = np.histogram2d(x, y, bins=bins)
+
+    fig = go.Figure(go.Heatmap(z=heatmap.T, x=xedges, y=yedges, colorscale='Viridis'))
+    fig.update_layout(title=f'Error Heatmap of ({x_index}) and ({y_index})', xaxis_title=f'{x_index}', yaxis_title=f'{y_index}')
+    return fig
+
+def plot_error_signs(em: ErrorMetrics, x_index: MetricsIndex, y_index: MetricsIndex):
+    x = x_index.rows(em).values.flatten()
+    y = y_index.rows(em).values.flatten()
+
+    df = pd.DataFrame({'x': x, 'y': y})
+    df = df[(df['x'] != 0) & (df['y'] != 0)]
+    df['sign_x'] = np.sign(df['x'])
+    df['sign_y'] = np.sign(df['y'])
+
+    counts = df.groupby(['sign_x', 'sign_y']).size().unstack(fill_value=0)
+
+    fig = go.Figure(go.Heatmap(z=counts.values, x=['-', '+'], y=['-', '+'],
+                               text=counts.values, texttemplate='%{text}', colorscale='Viridis'))
+    fig.update_layout(xaxis_title=f'{x_index} sign', yaxis_title=f'{y_index} sign', title=f'Signs of {x_index} and {y_index}')
+    return fig
+
+def plot_error_over_inconsistency(em: ErrorMetrics, mi: MetricsIndex, inc: pd.DataFrame, outlier_threshold = 0.0):
+    errors = mi.rows(em).values.flatten()
+    inc_vals = inc.values.flatten()
+
+    if outlier_threshold:
+        mask = (errors < np.quantile(errors, outlier_threshold)) & (np.abs(inc_vals) < np.quantile(np.abs(inc_vals), outlier_threshold))
+        errors = errors[mask]
+        inc_vals = inc_vals[mask]
+
+    fig = px.scatter(x=inc_vals, y=errors,
+               title=f'{mi} Error vs inconsistency', labels={'x': f'{inc.index.tolist()} Inconsistency', 'y': f'{mi} Error'})
+    return fig
