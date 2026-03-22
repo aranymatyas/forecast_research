@@ -157,7 +157,8 @@ def plot_error_distribution(em: ErrorMetrics, indeces: list[MetricsIndex], title
 
     for index in indeces:
         errors = index.values(em).flatten()
-        errors = errors[errors < np.quantile(errors, outlier_threshold)]
+        if outlier_threshold:
+            errors = errors[errors < np.quantile(errors, outlier_threshold)]
         fig.add_trace(go.Histogram(x=errors, name=str(index), opacity=0.6, histnorm='probability'))
 
     fig.update_traces(xbins_size=bin_size)
@@ -179,7 +180,9 @@ def plot_error_qq(em: ErrorMetrics, index_x: MetricsIndex, index_y: MetricsIndex
     x = np.quantile(x, np.linspace(0, 1, 100))
     y = np.quantile(y, np.linspace(0, 1, 100))
 
-    fig = px.scatter(x=x, y=y, title=f'QQ-Plot ({index_x}) vs ({index_y})', labels={'x': f'{index_x}', 'y': f'{index_y}'})
+    color = np.where(y > x, 'Above', 'Below')
+    fig = px.scatter(x=x, y=y, color=color, title=f'QQ-Plot ({index_x}) vs ({index_y})', labels={'x': f'{index_x}', 'y': f'{index_y}'},
+                     color_discrete_map={'Above': 'Red', 'Below': 'Blue'})
     fig.add_shape(type="line", x0=min(x), y0=min(x), x1=max(x), y1=max(x), line=dict(dash='dash'))
     return fig
 
@@ -226,8 +229,13 @@ def plot_error_func(em: ErrorMetrics, index_x: MetricsIndex, index_y: MetricsInd
     df.sort_values('x', inplace=True)
 
 
-    fig = px.line(df, x='x', y='y', title=f'Scatter Plot: {index_x} vs {index_y}',
-                     labels={'x': f'{index_x}', 'y': f'{index_y}'})
+    fig = px.scatter(df, x='x', y='y', title=f'Scatter Plot: {index_x} vs {index_y}',
+                     labels={'x': f'{index_x}', 'y': f'{index_y}'},
+                     trendline='ols', trendline_color_override='red')
+
+    fig.add_shape(type="line", x0=df['x'].min(), y0=df['x'].min(), x1=df['x'].max(), y1=df['x'].max(),
+                  line=dict(dash='dash'))
+
 
     return fig
 
@@ -304,7 +312,7 @@ def plot_stats(stats_df: pd.DataFrame, stat: str, labels: tuple = (0,)):
     fig.update_layout(xaxis_title='Method', yaxis_title=stat)
     return fig
 
-def plot_error_heatmap(em: ErrorMetrics, x_index: MetricsIndex, y_index: MetricsIndex, bins=15, outlier_threshold=0.0):
+def plot_error_heatmap(em: ErrorMetrics, x_index: MetricsIndex, y_index: MetricsIndex, bins=15, outlier_threshold=0.0, log_scale=False):
     x = x_index.rows(em).values.flatten()
     y = y_index.rows(em).values.flatten()
 
@@ -316,11 +324,17 @@ def plot_error_heatmap(em: ErrorMetrics, x_index: MetricsIndex, y_index: Metrics
 
     heatmap, xedges, yedges = np.histogram2d(x, y, bins=bins)
 
+    if log_scale:
+        heatmap = np.log1p(heatmap)
+
+    title_prefix = "Log scale " if log_scale else ""
+
     fig = go.Figure(go.Heatmap(z=heatmap.T, x=xedges, y=yedges, colorscale='Viridis'))
-    fig.update_layout(title=f'Error Heatmap of ({x_index}) and ({y_index})', xaxis_title=f'{x_index}', yaxis_title=f'{y_index}')
+    fig.update_layout(title=title_prefix + f'Error Heatmap of ({x_index}) and ({y_index})',
+                      xaxis_title=f'{x_index}', yaxis_title=f'{y_index}')
     return fig
 
-def plot_error_signs(em: ErrorMetrics, x_index: MetricsIndex, y_index: MetricsIndex):
+def plot_error_signs(em: ErrorMetrics, x_index: MetricsIndex, y_index: MetricsIndex, percentage=False):
     x = x_index.rows(em).values.flatten()
     y = y_index.rows(em).values.flatten()
 
@@ -329,11 +343,13 @@ def plot_error_signs(em: ErrorMetrics, x_index: MetricsIndex, y_index: MetricsIn
     df['sign_x'] = np.sign(df['x'])
     df['sign_y'] = np.sign(df['y'])
 
-    counts = df.groupby(['sign_x', 'sign_y']).size().unstack(fill_value=0)
+    counts = df.groupby(['sign_x', 'sign_y']).size().unstack(fill_value=0).astype(float)
+    if percentage:
+        counts.loc[:, :] = np.round(counts / len(x) * 100, decimals=2)
 
     fig = go.Figure(go.Heatmap(z=counts.values, x=['-', '+'], y=['-', '+'],
                                text=counts.values, texttemplate='%{text}', colorscale='Viridis'))
-    fig.update_layout(xaxis_title=f'{x_index} sign', yaxis_title=f'{y_index} sign', title=f'Signs of {x_index} and {y_index}')
+    fig.update_layout(xaxis_title=f'{y_index} sign', yaxis_title=f'{x_index} sign', title=f'Signs of {x_index} and {y_index}')
     return fig
 
 def plot_error_over_inconsistency(em: ErrorMetrics, mi: MetricsIndex, inc: pd.DataFrame, outlier_threshold = 0.0):

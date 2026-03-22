@@ -172,6 +172,10 @@ class ErrorMetrics:
         stats = index.rows(stats)
         return stats
 
+    @property
+    def stats(self):
+        return self.get_error_stats()
+
     def save(self, filename):
         self.metrics.to_csv(filename)
 
@@ -323,3 +327,18 @@ class CustomMetrics(ErrorMetrics):
 
         multiplied_df.index = pd.MultiIndex.from_frame(op1_idx_df)
         return CustomMetrics(multiplied_df, em.ts_columns)
+
+    @classmethod
+    def keep_outliers(cls, em: ErrorMetrics, threshold: float = 0.95, log = False):
+        metrics = pd.DataFrame(index=em.metrics.index)
+        cols = None
+        for idx, row in em.metrics.iterrows():
+            outliers = row[row > row.quantile(threshold)]
+            if not cols:
+                cols = [f'outlier_{i}' for i in range(len(outliers))]
+            metrics.loc[idx, cols] = outliers.values
+
+        if log:
+            metrics = np.log2(metrics)
+
+        return CustomMetrics(metrics, cols)
