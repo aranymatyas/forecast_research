@@ -237,3 +237,18 @@ class BinaryTemporalHierarchy(TemporalHierarchy):
                     DAYS],
             name='Binary'
         )
+
+class FullTemporalHierarchy(TemporalHierarchy):
+    def __init__(self):
+        ''' Full hierarchy with all possible levels '''
+        super().__init__(
+            levels=[MONTHS, FORTNIGHTS, WEEKS, WEEKENDS, WEEKDAYS,
+                    ArbitraryAggregation('16Days', [1] * 16 + [0] * 12),
+                    ArbitraryAggregation('12Days', [0] * 16 + [1] * 12),
+                    ArbitraryAggregation('8Days', [1] * 8 + [0] * 20),
+                    ArbitraryAggregation('8Days', [0] * 8 + [1] * 8 + [0] * 12),
+                    ArbitraryAggregation('8Days', [0] * 16 + [1] * 8 + [0] * 4),
+                    FOUR_DAYS, TWO_DAYS,
+                    DAYS],
+            name='Full'
+        )

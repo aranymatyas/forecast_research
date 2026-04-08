@@ -1,11 +1,14 @@
 .venv
 data/
+.vscode
 
 *_files/
 .Renviron
 *.html
 **__pycache__/
 TODO.md
+metrics/**_raw.csv
+sample/
 
 # For now
 fareco_demo.qmd
