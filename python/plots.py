@@ -8,7 +8,8 @@ from python.utils import is_long, long_to_wide
 from python.temporal_hierarchy import TemporalHierarchy
 from python.aggregation import Aggregation, DAYS, MONTHS
 from python.time_series import BASE_FORECASTS, VALIDATION_SET, RECONCILED_FORECASTS, TRAIN_SET
-from python.error_metrics import ErrorMetrics, MetricsIndex
+from python.error_metrics import ErrorMetrics, MetricsIndex, MetricsFilter
+from python.sampled_hierarchies import SampledHierarchies, MetricAggregateStore, MetricAggregate, StatsMatrix, IndexMatrix
 
 def plot_nans(df: pd.DataFrame):
     '''' Optimal for wide format. GenAI code '''
@@ -363,4 +364,31 @@ def plot_error_over_inconsistency(em: ErrorMetrics, mi: MetricsIndex, inc: pd.Da
 
     fig = px.scatter(x=inc_vals, y=errors,
                title=f'{mi} Error vs inconsistency', labels={'x': f'{inc.index.tolist()} Inconsistency', 'y': f'{mi} Error'})
+    return fig
+
+def plot_sampled_error_matrix(sh: SampledHierarchies, value: str, *,
+                              em: ErrorMetrics | None=None, index_matrix: IndexMatrix | None=None, stats_matrix: StatsMatrix | None=None,
+                              df_filter: MetricsFilter=None,
+                              accuracy=2):
+    if stats_matrix is None and (em is None or index_matrix is None):
+        raise ValueError('Either stats_matrix or both em and indeces need to be specified')
+
+    all_stats = sh.error_matrix(em, index_matrix, df_filter) if stats_matrix is None else stats_matrix
+    stats = np.vectorize(lambda s: s[value].item())(all_stats)
+    fig = px.imshow(stats, labels={"x": "Heights", "y": "Group IDs", "color": "Error"},
+                x=sh.heights, y=sh.group_ids,
+                text_auto=f'.{accuracy}f')
+
+    return fig
+
+def plot_sampled_error_bars(em: ErrorMetrics, indeces: list[MetricsIndex], value: str, df_filter: MetricsFilter=None):
+    stats = {str(index): em.get_error_stats(index, df_filter)[value].item() for index in indeces}
+    fig = px.bar(x=list(stats.keys()), y=list(stats.values()), title=f'{value} statistics',
+                 labels={'x': 'Index', 'y': value})
+    return fig
+
+def plot_aggregate_statistics(aggregates: MetricAggregate, title_suffix=''):
+    fig = go.Figure(data=go.Bar(y=aggregates.values))
+    fig.update_layout(title=f'{aggregates} {title_suffix}', xaxis_title=aggregates.group_by, yaxis_title=aggregates.stat)
+    fig.update_yaxes(range=[aggregates.values.min() * 0.8, aggregates.values.max() * 1.05])
     return fig

@@ -1,5 +1,5 @@
 from itertools import product
-from typing import Literal, Iterable
+from typing import Literal, Iterable, Callable
 import pandas as pd
 import numpy as np
 
@@ -7,7 +7,7 @@ from python.temporal_hierarchy import TemporalHierarchy
 from python.time_series import BASE_FORECASTS, RECONCILED_FORECASTS, VALIDATION_SET, TRAIN_SET, TimeSeriesType
 from python.aggregation import DAYS, MONTHS, Aggregation
 
-
+type MetricsFilter = Callable[[pd.DataFrame], pd.DataFrame] | None
 type MetricType = Literal['mase', 'nrmse', 'wape', '1-r2']
 METRICS = ('mase', 'nrmse', 'wape', '1-r2')
 
@@ -158,7 +158,7 @@ class ErrorMetrics:
     def get_error(self, index: MetricsIndex):
         return index.rows(self)
 
-    def get_error_stats(self, index: MetricsIndex = NO_INDEX, df_filter = None):
+    def get_error_stats(self, index: MetricsIndex = NO_INDEX, df_filter: MetricsFilter = None):
         df = self.metrics[self.ts_columns]
         if df_filter is not None:
             df = df_filter(df)

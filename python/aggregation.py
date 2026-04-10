@@ -51,6 +51,17 @@ class Aggregation:
     def __str__(self):
         return self.hierarchy_name
 
+    def __eq__(self, value):
+        if self is value:
+            return True
+        if isinstance(value, Aggregation):
+            sm_1 = self.make_summing_matrix([1] * 28).drop(columns=['hierarchy'])
+            sm_2 = value.make_summing_matrix([1] * 28).drop(columns=['hierarchy'])
+            if sm_1.equals(sm_2):
+                return True
+
+        return False
+
 class ArbitraryAggregation(Aggregation):
     def __init__(self, hierarchy_name: str, summing_row: np.ndarray | list):
         summing_row = np.array(summing_row, dtype=np.int32)
