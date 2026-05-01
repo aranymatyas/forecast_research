@@ -1,0 +1,13 @@
+---
+title: "Improvability of fixed target granularity forecast precision by aggregation and reconciliation"
+author: "Arany Matyas"
+header-includes:
+  - \usepackage{titlesec}
+  - \titleformat{\paragraph}[hang]{\normalfont\normalsize\bfseries}{}{0em}{}
+  - \titlespacing*{\paragraph}{0pt}{3.25ex plus 1ex minus .2ex}{1em}
+  - \usepackage{float}
+  - \floatplacement{figure}{H}
+  - \setlength{\belowcaptionskip}{0pt}
+  - \setlength{\abovecaptionskip}{-3pt}
+geometry: margin=1in
+---
