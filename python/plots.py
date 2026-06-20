@@ -378,6 +378,8 @@ def plot_sampled_error_matrix(sh: SampledHierarchies, value: str, *,
     fig = px.imshow(stats, labels={"x": "Heights", "y": "Group IDs", "color": "Error"},
                 x=sh.heights, y=sh.group_ids,
                 text_auto=f'.{accuracy}f')
+    fig.update_xaxes(tickmode='array', tickvals=sh.heights)
+    fig.update_yaxes(tickmode='array', tickvals=sh.group_ids)
 
     return fig
 
