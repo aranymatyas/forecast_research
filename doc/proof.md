@@ -1,6 +1,6 @@
 ## Proof of theorem
 
-The theorem which will be proved states the following: **Adding Intermediate Aggregation Levels Reduces Forecast Error RMSE Under MinT Reconciliation**
+The theorem which will be proved states the following: **Adding Intermediate Aggregation Levels Reduces Forecast Error RMSE, at All Aggregation Levels, Under MinT Reconciliation**
 
 ### Notation and Setup
 
@@ -22,15 +22,15 @@ $$\mathbb{E}[\hat{\mathbf{e}}] = \boldsymbol{\delta}$$
 
 where $\boldsymbol{\delta} \in \mathbb{R}^m$ is an arbitrary (possibly non-zero) bias vector.
 
-Let $W = \text{Var}(\hat{\mathbf{e}}) \in \mathbb{R}^{m \times m}$ be the covariance matrix of the base forecast errors. Every covariance matrix is positive semi-definite by construction, and in practice it will be positive definite, since for any **constant** $\mathbf{x} \in \mathbb{R}^m$ we write the following:
+Let $\text{Var}(\hat{\mathbf{e}}) \in \mathbb{R}^{m \times m}$ be the covariance matrix of the base forecast errors. Every covariance matrix is positive semi-definite by construction, since for any **constant** $\mathbf{x} \in \mathbb{R}^m$ we write the following:
 
-$$\mathbf{x}' W \mathbf{x} = \text{Var}(\mathbf{x}'(\hat{\mathbf{e}} - \mathbb{E}[\hat{\mathbf{e}}])) = \text{Var}(\mathbf{x}'(\hat{\mathbf{e}} - \boldsymbol{\delta}))$$
+$$\mathbf{x}' \text{Var}(\hat{\mathbf{e}}) \mathbf{x} = \text{Var}(\mathbf{x}'(\hat{\mathbf{e}} - \mathbb{E}[\hat{\mathbf{e}}])) = \text{Var}(\mathbf{x}'(\hat{\mathbf{e}} - \boldsymbol{\delta}))$$
 
-To show pisitive semi definity, we just expand the variance and see that a square is always non negative:
+To show positive semi definity, we just expand the variance and see that a square is always non-negative:
 
 $$\text{Var}(\mathbf{x}'(\hat{\mathbf{e}} - \mathbb{E}[\hat{\mathbf{e}}])) = \mathbb{E}\left[(\mathbf{x}'(\hat{\mathbf{e}} - \mathbb{E}[\hat{\mathbf{e}}]))^2\right] \geq 0$$
 
-For $W$ to not be poisitive definite, we would need to show such $\mathbf{x}$ that would make the dot product $\mathbf{x}'(\hat{\mathbf{e}} - \boldsymbol{\delta})$ constant to collapse the variance to zero. The existance of such $\mathbf{x}$ would mean that the $m$ different residuals could be written as a linear combination of other residuals (plus a constant). Because base forecasts are made independently, this is highly unlikely.
+For $\text{Var}(\hat{\mathbf{e}})$ to not be positive definite, we would need to show such $\mathbf{x}$ that would make the dot product $\mathbf{x}'(\hat{\mathbf{e}} - \boldsymbol{\delta})$ constant to collapse the variance to zero. The existance of such $\mathbf{x}$ would mean that the $m$ different residuals could be written as a linear combination of other residuals (plus a constant). Because base forecasts are made independently, this is highly unlikely.
 
 ---
 
@@ -38,11 +38,11 @@ For $W$ to not be poisitive definite, we would need to show such $\mathbf{x}$ th
 
 The MinT (Minimum Trace) reconciled forecast is written and defined as:
 
-$$\tilde{\mathbf{y}} = S \underbrace{(S' W^{-1} S)^{-1} S' W^{-1}}_{G} \hat{\mathbf{y}} = S G \hat{\mathbf{y}}$$
+$$\tilde{\mathbf{y}} = S \underbrace{(S' \text{Var}(\hat{\mathbf{y}})^{-1} S)^{-1} S' \text{Var}(\hat{\mathbf{y}})^{-1}}_{G} \hat{\mathbf{y}} = S G \hat{\mathbf{y}}$$
 
-where $\hat{\mathbf{y}}$ are the independently made, incoherent forecasts, and $\tilde{\mathbf{y}}$ are the coherent forecasts, and $W = \text{Var}(\hat{\mathbf{y}})$.
+where $\hat{\mathbf{y}}$ are the independently made, incoherent forecasts, and $\tilde{\mathbf{y}}$ are the coherent forecasts.
 
-This is a **generalised least squares (GLS)** estimator according to [Wickramasuriya, S. L., Athanasopoulos, G., & Hyndman, R. J. (2017). Optimal forecast reconciliation for hierarchical and grouped time series through trace minimization, Section 2.2](https://robjhyndman.com/papers/MinT.pdf).
+This is a **generalised least squares (GLS)** estimator [@hyndmanmint].
 
 It estimates the leaf/bottom level forecasts by projecting the base forecasts onto the coherent subspace where $\{ S G {\mathbf{y}} = S\mathbf{b} : \mathbf{b} \in \mathbb{R}^n \}$, and then applying the summing matrix.
 
@@ -56,7 +56,7 @@ $$\mathbf{P} = \mathbf{S}\mathbf{G}$$
 
 **Assumption 1 (Unbiasedness).** We assume the base forecasts are unbiased: $\mathbb{E}[\hat{\mathbf{e}}] = \boldsymbol{\delta} = \mathbf{0}$. From here we need to establish that if this assumption is true, then the reconciled forecasts produced from the unbiased base ones, stay unbiased.
 
-From the paper [Wickramasuriya, S. L., Athanasopoulos, G., & Hyndman, R. J. (2019). Optimal forecast reconciliation for hierarchical and grouped time series through trace minimization, Section 2.1](https://robjhyndman.com/papers/MinT.pdf) we know that minT reconciliation is an unbiased projection since
+We know that minT reconciliation is an unbiased projection [@hyndmanmint] since
 
 $$\mathbf{S}\mathbf{G}\mathbf{S} = \mathbf{S}$$
 
@@ -70,7 +70,7 @@ $$\tilde{\mathbf{e}} = \mathbf{y} - \tilde{\mathbf{y}}$$
 
 $$\hat{\mathbf{e}} = \mathbf{y} - \hat{\mathbf{y}}$$
 
-and if we substitute $\tilde{\mathbf{y}} = \mathbf{P}\hat{\mathbf{y}}$ and the base error formula
+and if we substitute $\tilde{\mathbf{y}} = \mathbf{P}\hat{\mathbf{y}}$ in the base error formula
 
 $$\tilde{\mathbf{e}} = \mathbf{y} - \mathbf{P}\hat{\mathbf{y}}$$
 
@@ -84,55 +84,15 @@ $$\tilde{\mathbf{e}} = \mathbf{y} - \mathbf{y} + \mathbf{P}\hat{\mathbf{e}}$$
 
 $$\tilde{\mathbf{e}} = \mathbf{P}\hat{\mathbf{e}}$$
 
-if $\hat{\mathbf{e}}$ is zero, then
+if $\mathbb{E}[\hat{\mathbf{e}}]$ is zero, then
 
-$$\tilde{\mathbf{e}} = \mathbf{P}(\mathbf{0}) = \mathbf{0}$$
+$$\mathbb{E}[\tilde{\mathbf{e}}] = \mathbb{E}[\mathbf{P}\hat{\mathbf{e}}]$$
 
+$$\mathbb{E}[\tilde{\mathbf{e}}] = \mathbf{P}\mathbb{E}[\hat{\mathbf{e}}]$$
 
-Therefore $\mathbb{E}[\tilde{\mathbf{y}}] = \mathbf{y}$. MinT **preserves unbiasedness**: if the base forecasts are unbiased, so are the reconciled forecasts.
+$$\mathbb{E}[\tilde{\mathbf{e}}] = \mathbf{P}(\mathbf{0}) = \mathbf{0}$$
 
-#### 2.2 Covariance of the Reconciled Forecasts
-
-- The reconciled forecasts are $\tilde{\mathbf{y}} = \mathbf{P}\hat{\mathbf{y}}$.
-- The variance of the base forecasts is $\text{Var}(\hat{\mathbf{y}}) = \mathbf{W}$.
-- The variance of the reconciled forecasts is $\text{Var}(\tilde{\mathbf{y}}) = \mathbf{V}$.
-
-Then because variance of vectors has the following property:
-
-$$\text{Var}(\mathbf{P}\hat{\mathbf{y}}) = \mathbf{P} \text{Var}(\hat{\mathbf{y}}) \mathbf{P}'$$
-
-From this, we know that the reconciled forecast variance $\mathbf{V}$ is
-
-$$\mathbf{V} = \mathbf{P} \mathbf{W} \mathbf{P}'$$
-
-- We know that: $\mathbf{P} = \mathbf{S}(\mathbf{S}'\mathbf{W}^{-1}\mathbf{S})^{-1}\mathbf{S}'\mathbf{W}^{-1}$
-- We also know that $\mathbf{W}$ is symmetrical, therefore $\mathbf{W}=\mathbf{W}'$. The inverse of a symmetrical matrix is symmetrical, because
-
-$$\mathbf{W} \mathbf{W}^{-1} = \mathbf{I}$$
-
-$$(\mathbf{W} \mathbf{W}^{-1})' = \mathbf{I}'$$
-
-$$(\mathbf{W}^{-1})' \mathbf{W}' = \mathbf{I}$$
-
-$$(\mathbf{W}^{-1})' \mathbf{W} = \mathbf{I}$$
-
-$$\mathbf{W}^{-1}=(\mathbf{W}^{-1})'$$
-
-Applying the transpose rule of product matrices where we reverse the order and transpose each term individually:
-
-$$\mathbf{P}' = (\mathbf{W}^{-1})' (\mathbf{S}')' \left((\mathbf{S}'\mathbf{W}^{-1}\mathbf{S})^{-1}\right)' \mathbf{S}' = \mathbf{W}^{-1} \mathbf{S} (\mathbf{S}'\mathbf{W}^{-1}\mathbf{S})^{-1} \mathbf{S}'$$
-
-If we substitue $\mathbf{P}$ and $\mathbf{P}'$ back into our variance formula
-
-$$\mathbf{V} = \left[ \mathbf{S}(\mathbf{S}'\mathbf{W}^{-1}\mathbf{S})^{-1}\mathbf{S}'\mathbf{W}^{-1} \right] \mathbf{W} \left[ \mathbf{W}^{-1}\mathbf{S}(\mathbf{S}'\mathbf{W}^{-1}\mathbf{S})^{-1}\mathbf{S}' \right]$$
-
-Then simplify by eliminating the inverse pair of $\mathbf{W}^{-1}$ and $\mathbf{W}$ in the middle
-
-$$\mathbf{V} = \mathbf{S}(\mathbf{S}'\mathbf{W}^{-1}\mathbf{S})^{-1} \left[ \mathbf{S}'\mathbf{W}^{-1} \mathbf{S} \right] (\mathbf{S}'\mathbf{W}^{-1}\mathbf{S})^{-1}\mathbf{S}'$$
-
-Then simplify by eliminating the inverse pair of $(\mathbf{S}'\mathbf{W}^{-1}\mathbf{S})$ and $(\mathbf{S}'\mathbf{W}^{-1}\mathbf{S})^{-1}$ It turns out that:
-
-$$\mathbf{V} = \mathbf{S}(\mathbf{S}'\mathbf{W}^{-1}\mathbf{S})^{-1}\mathbf{S}'$$
+Therefore MinT **preserves unbiasedness**: if the base forecasts are unbiased, so are the reconciled forecasts.
 
 ---
 
@@ -174,120 +134,148 @@ $$\text{MSE}(\hat{\theta}) = \text{Var}(\hat{\theta}) + \text{Bias}(\hat{\theta}
 
 For our case, since we assume that our base forecast are unbaised, and because of that our reconciled forecasts are unbiased, the formula reduces to
 
-$$\text{MSE}({y}) = \text{Var}({y}) + \text{Bias}({y})^2 = \text{Var}({y}) + 0 = \text{Var}({y})$$
+$$\text{MSE}({\tilde{\mathbf{y}}}) = \text{Var}({\tilde{\mathbf{y}}}) + \text{Bias}({\tilde{\mathbf{y}}})^2 = \text{Var}({\tilde{\mathbf{y}}}) + 0 = \text{Var}({\tilde{\mathbf{y}}})$$
 
 From that we can also state that
 
-$$\text{RMSE}(y) = \sqrt{\text{Var}({y})}$$
+$$\text{RMSE}(\tilde{\mathbf{y}}) = \sqrt{\text{Var}({\tilde{\mathbf{y}}})}$$
 
 ---
 
-### Positive Semi-Definity of covariance differences
-
-- Let $\hat{\mathbf{e}}$ be the base forecast errors, and $\mathbf{W} = \text{Var}(\hat{\mathbf{e}})$.
-- Let $\mathbf{P}$ be the MinT projection matrix: $\mathbf{P} = \mathbf{S}(\mathbf{S}'\mathbf{W}^{-1}\mathbf{S})^{-1}\mathbf{S}'\mathbf{W}^{-1}$.
-- Let $\tilde{\mathbf{e}}$ be the reconciled errors, where $\tilde{\mathbf{e}} = \mathbf{P}\hat{\mathbf{e}}$.
-
-With the following algebraic trick
-
-$$\hat{\mathbf{e}} = \mathbf{P}\hat{\mathbf{e}} + (\hat{\mathbf{e}} - \mathbf{P}\hat{\mathbf{e}})$$
-
-We can write
-
-$$\hat{\mathbf{e}} = \mathbf{P}\hat{\mathbf{e}} + (\mathbf{I} - \mathbf{P})\hat{\mathbf{e}}$$
-
-If we calculate the covariance of the two terms on the right hand side
-
-$$\text{Cov} \left( \mathbf{P}\hat{\mathbf{e}}, (\mathbf{I} - \mathbf{P})\hat{\mathbf{e}} \right)$$
-
-$$= \mathbf{P} \text{Var}(\hat{\mathbf{e}}) (\mathbf{I} - \mathbf{P})'$$
-
-$$= \mathbf{P} \mathbf{W} (\mathbf{I} - \mathbf{P}')$$
-
-$$= \mathbf{P}\mathbf{W} - \mathbf{P}\mathbf{W}\mathbf{P}'$$
-
-From section 2.2 we know that
-
-$$\mathbf{P}\mathbf{W}\mathbf{P}' = \mathbf{V}$$
-
-And if we expand the projection matrix $\mathbf{P}$ we can simplify
-
-$$\mathbf{P}\mathbf{W} = \left[ \mathbf{S}(\mathbf{S}'\mathbf{W}^{-1}\mathbf{S})^{-1}\mathbf{S}'\mathbf{W}^{-1} \right] \mathbf{W}$$
-
-$$\mathbf{P}\mathbf{W} = \mathbf{S}(\mathbf{S}'\mathbf{W}^{-1}\mathbf{S})^{-1}\mathbf{S}'$$
-
-From section 2.2 we know that
-
-$$\mathbf{V} = \mathbf{S}(\mathbf{S}'\mathbf{W}^{-1}\mathbf{S})^{-1}\mathbf{S}' = \mathbf{P}\mathbf{W}$$
-
-Substituting back our finding into the covariance
-
-$$\text{Cov} \left( \mathbf{P}\hat{\mathbf{e}}, (\mathbf{I} - \mathbf{P})\hat{\mathbf{e}} \right) = \mathbf{V} - \mathbf{V} = \mathbf{0}$$
-
-We see that the two terms are uncorrelated. Because of this, if we then take the covariance of both sides of our original equation, the right side just becomes the sum of the two covariances.
-
-$$\hat{\mathbf{e}} = \mathbf{P}\hat{\mathbf{e}} + (\mathbf{I} - \mathbf{P})\hat{\mathbf{e}}$$
-
-$$\text{Var}(\hat{\mathbf{e}}) = \text{Var}(\mathbf{P}\hat{\mathbf{e}}) + \text{Var}((\mathbf{I} - \mathbf{P})\hat{\mathbf{e}})$$
-
-$$\mathbf{W} = \mathbf{V} + \text{Var}((\mathbf{I} - \mathbf{P})\hat{\mathbf{e}})$$
-
-$$\mathbf{W} - \mathbf{V} = \text{Var}((\mathbf{I} - \mathbf{P})\hat{\mathbf{e}})$$
-
-From section 1. we know that, since on the right side there is a covariance matrix, we know that it positive semi-definite matrix, therefore $\mathbf{W} - \mathbf{V}$ must be PSD as well.
-
 ### Core Theorem
-
-#### Monotonicity of Variance
-
-Let $\mathbf{\Delta} = \mathbf{W} - \mathbf{V}$. Because we proved that $\mathbf{\Delta}$ is a PSD matrix, it must satisfy the quadratic form condition for any non-zero vector $\mathbf{x}$:
-
-$$\mathbf{x}' \mathbf{\Delta} \mathbf{x} \ge 0$$
-
-To isolate the variance of any specific node of any aggregation level $i$ (e.g., let $i=1$ denote the top-level aggregate's single node), we define $\mathbf{x}$ as the standard basis vector $\mathbf{e}_i$.
-
-Applying this basis vector to the quadratic form extracts the $i$-th diagonal element of the matrix. Because $\mathbf{\Delta}$ is PSD, the following equation must hold true.
-
-$$\mathbf{e}_i' \mathbf{\Delta} \mathbf{e}_i = \Delta_{ii}$$
-
-$$\Delta_{ii} \ge 0$$
-
-$$(W_{ii} - V_{ii}) \ge 0$$
-
-$$V_{ii} \le W_{ii}$$
-
-Where both $V_{ii}$ and  $W_{ii}$ are scalar values. These values specifically are the $i$-th aggregation node's error variances before and after reconciliation. Hence we know that on node of any aggregation level, reconciliation does not increase the variance of the errors.
 
 #### Introducing more levels
 
-Let $\mathbf{S}_k$ represent the summing matrix of a temporal hierarchy $\mathcal{H}_k$ with $k$ intermediate levels (levels between the leafs and the root). When a new node of an aggregation level is added, the summing matrix expands by adding new rows, becoming $\mathbf{S}_{k+1}$.
+The MinT algorithm mathematically formulates forecast reconciliation as a Generalized Least Squares (GLS) regression problem. In this framework, the model is written as:
 
-The MinT algorithm mathematically formulates forecast reconciliation as a Generalized Least Squares (GLS) regression problem. In this framework, adding intermediate temporal levels introduces new rows to the summing matrix $\mathbf{S}$. Each new row acts as an additional linear constraint - a strict aggregation rule - that the final reconciled forecasts (the solutions to the problem) must satisfy. Because the algorithm must now optimize subject to more restrictions, the set of mathematically allowable forecasts (the feasible parameter space) under the expanded hierarchy $\mathbf{S}_{k+1}$ shrinks (or does not expand at least), becoming a subspace of the parameter space defined by the simpler hierarchy $\mathbf{S}_k$. This means that any reconciled forecasts produced by $k+1$ aggregation nodes, will also satisfy the constraints of the 'base' $k$ aggregations.
+$$\hat{\mathbf{y}}=\mathbf{S}\mathbf{b}+\mathbf{e}$$
 
-For our use case here, we now assume that we add nodes/aggregation levels to the the reconciliation process, but we discard their corresponding reconciled forecast values, so that the number of output forecasts match before and after the introducing of new nodes. This is to make sure that the sizes of the covariance matrices also match.
+where we regress the base forecasts $\hat{\mathbf{y}}$ on the summing matrix $\mathbf{S}$ to estimate the bottom-level coherent forecasts $\mathbf{b}$. If $\mathbf{W} = \text{Var}(\hat{\mathbf{e}})$, then the covariance matrix of the GLS estimator [@greeneeconometric] for the bottom level is given by:
 
-Following the properties of Restricted Least Squares [Chan, Univ. of Sydney](https://www.maths.usyd.edu.au/u/jchan/GLM/RestrictedLeastSquares.pdf), imposing additional valid linear constraints on an optimal GLS estimator results in a variance matrix equal to the unrestricted variance minus a positive semi-definite matrix. Therefore, if $\mathbf{V}_k$ and $\mathbf{V}_{k+1}$ are the reconciled covariance matrices for $k$ and $k+1$ levels respectively (we call the case with $k$ unrestricted), we can write that
+$$\text{Var}(\tilde{\mathbf{b}})=(\mathbf{S}'\mathbf{W}^{-1}\mathbf{S})^{-1}$$
 
-$$\mathbf{V}_{k+1} = \mathbf{V}_k - \text{<A PSD Matrix>}$$
+Let $\mathcal{H}_k$ be a temporal hierarchy with a set of aggregation levels, characterized by the summing matrix $\mathbf{S}_k$ and base forecast covariance $\mathbf{W}_k$. For the sake of the proof, we define $\mathcal{I}_k$ to be the inverse of the bottom level's covariance matrix
 
-$$\mathbf{V}_k - \mathbf{V}_{k+1} = \text{<A PSD Matrix>}$$
+$$\mathcal{I}_k=\text{Var}(\tilde{\mathbf{b}})^{-1}=\mathbf{S}_k'\mathbf{W}_k^{-1}\mathbf{S}_k$$
 
-Applying the diagonal extraction to this new PSD difference, we can isolate the variance at any node of an aggregation level, to see that the variance does not increase, by adding more constraints, or aggregation levels.
+When we introduce a new intermediate aggregation level to create hierarchy $\mathcal{H}_{k+1}$, we are appending new observations (base forecasts) to the system. The augmented total covariance matrix $\mathbf{W}_{k+1}$, accounting for potential correlations between the existing and newly added base forecasts, can be written as a block matrix:
 
-$$(V_k)_{ii} \ge (V_{k+1})_{ii}$$
+$$\mathbf{W}_{k+1}=\begin{bmatrix}\mathbf{W}_k&\mathbf{C}\\\mathbf{C}'&\mathbf{W}_{new}\end{bmatrix}$$
 
-#### Conclusion
+where $\mathbf{W}_{new}$ is the variance of the newly added forecasts, and $\mathbf{C}$ is the cross-covariance between the old and new forecasts. The total summing matrix is expanded accordingly:
 
-Since we have shown that the NRMSE errors of individual nodes of aggregation levels (e.g. $week1$ node of weekly aggregation) do not increase by having more of them, we know that the average error of whole aggregation levels do not increase either.
+$$\mathbf{S}_{k+1}=\begin{bmatrix}\mathbf{S}_k\\\mathbf{S}_{new}\end{bmatrix}$$
 
-We have shown that, in theory, given that the base forecasts are unbiased, we can guarantee, that by adding any kind of additional aggregation levels, to any hierarchy cannot increase the variance of any forecast, at any level, meaning it cannot increase the RMSE metric of it either. In the research we studied NRMSE, as in normalised RMSE to make the metrics more comparable across different datasets.
+To calculate the the new inverse $\mathcal{I}_{k+1}=\mathbf{S}_{k+1}'\mathbf{W}_{k+1}^{-1}\mathbf{S}_{k+1}$, we invert the block covariance matrix $\mathbf{W}_{k+1}$ using the Schur Complement. Let $\mathbf{K}$ be the Schur Complement of $\mathbf{W}_k$ in $\mathbf{W}_{k+1}$:
 
-The normalisation meant that the RMSE value at a granularity was divided by the variance of the training data at that granularity, which of course is a constant, and independent of what kind of hierarchy was built on said dataset.
+$$\mathbf{K}=\mathbf{W}_{new}-\mathbf{C}'\mathbf{W}_k^{-1}\mathbf{C}$$
 
-Therefore the NRMSE metric cannot increase by adding more hierarchy levels.
+Because $\mathbf{W}_{k+1}$ is a positive definite covariance matrix, by the Haynsworth inertia additivity formula, its Schur Complement $\mathbf{K}$ is also positive definite, ensuring $\mathbf{K}^{-1}$ exists and is positive definite [@zhangschur].
 
-### In practice
+Using standard block inversion theorems, the inverse of our total covariance matrix is perfectly defined as:
 
-The theorem explains how the mean of the NRMSE errors decreased at both top level and bottom level hierarchy. We have also seen evidence for increase of the median at the same time, which could be attributed to the fact that the distribution of the NRMSE errors were probably tightened and pulled together, hence possibly increasing the median.
+$$\mathbf{W}_{k+1}^{-1} = \begin{bmatrix} \mathbf{W}_k^{-1} + \mathbf{W}_k^{-1}\mathbf{C}\mathbf{K}^{-1}\mathbf{C}'\mathbf{W}_k^{-1} & -\mathbf{W}_k^{-1}\mathbf{C}\mathbf{K}^{-1} \\ -\mathbf{K}^{-1}\mathbf{C}'\mathbf{W}_k^{-1} & \mathbf{K}^{-1} \end{bmatrix}$$
+
+Now we substitute this block inverse matrix back into our $\mathcal{I}_{k+1}=\mathbf{S}_{k+1}'\mathbf{W}_{k+1}^{-1}\mathbf{S}_{k+1}$ equation:
+
+$$\mathcal{I}_{k+1} = \begin{bmatrix} \mathbf{S}_k' & \mathbf{S}_{new}' \end{bmatrix} \begin{bmatrix} \mathbf{W}_k^{-1} + \mathbf{W}_k^{-1}\mathbf{C}\mathbf{K}^{-1}\mathbf{C}'\mathbf{W}_k^{-1} & -\mathbf{W}_k^{-1}\mathbf{C}\mathbf{K}^{-1} \\ -\mathbf{K}^{-1}\mathbf{C}'\mathbf{W}_k^{-1} & \mathbf{K}^{-1} \end{bmatrix} \begin{bmatrix} \mathbf{S}_k \\ \mathbf{S}_{new} \end{bmatrix}$$
+
+When this matrix multiplication is solved and and all the terms are expanded, five distinct terms remain:
+
+1. $+ \mathbf{S}_k' \mathbf{W}_k^{-1} \mathbf{S}_k$
+2. $+ \mathbf{S}_k' \mathbf{W}_k^{-1} \mathbf{C} \mathbf{K}^{-1} \mathbf{C}' \mathbf{W}_k^{-1} \mathbf{S}_k$
+3. $- \mathbf{S}_k' \mathbf{W}_k^{-1} \mathbf{C} \mathbf{K}^{-1} \mathbf{S}_{new}$
+4. $- \mathbf{S}_{new}' \mathbf{K}^{-1} \mathbf{C}' \mathbf{W}_k^{-1} \mathbf{S}_k$
+5. $+ \mathbf{S}_{new}' \mathbf{K}^{-1} \mathbf{S}_{new}$
+
+The first term is exactly $\mathcal{I}_{old}$. We can take the remaining four terms and perfectly factor them into a single, elegant quadratic equation. Let us define a new matrix $\mathbf{A}$:
+
+$$\mathbf{A} = \mathbf{S}_{new} - \mathbf{C}'\mathbf{W}_k^{-1}\mathbf{S}_k$$
+
+It is a valid matrix of shape $(m_{new} \times n)$, because the shape of $\mathbf{S}_{new}$ is $(m_{new} \times n)$, the shape of $\mathbf{S}_k$ is $(m_k \times n)$, the shape of $\mathbf{W}_k^{-1}$ is $(m_k \times m_k)$ and the shape of $\mathbf{C}$ is $(m_k \times m_{new})$.
+
+We can also derive $\mathbf{A}'$ to be
+
+$$\mathbf{A}' = (\mathbf{S}_{new} - \mathbf{C}'\mathbf{W}_k^{-1}\mathbf{S}_k)'$$
+
+$$\mathbf{A}' = \mathbf{S}_{new}' - (\mathbf{S}_k' (\mathbf{W}_k^{-1})' (\mathbf{C}')')$$
+
+Since $\mathbf{W}_k$ is symmetrical, its inverse is also
+
+$$\mathbf{A}' = \mathbf{S}_{new}' - \mathbf{S}_k'\mathbf{W}_k^{-1}\mathbf{C}$$
+
+Now if we calculate the matrix $\mathbf{A}' \mathbf{K}^{-1} \mathbf{A}$ (the shape of $\mathbf{K}^{-1}$ is $(m_{new} \times m_{new})$)
+
+$$(\mathbf{S}_{new}' - \mathbf{S}_k'\mathbf{W}_k^{-1}\mathbf{C}) \mathbf{K}^{-1} (\mathbf{S}_{new} - \mathbf{C}'\mathbf{W}_k^{-1}\mathbf{S}_k)$$
+
+$$(\mathbf{S}_{new}' - \mathbf{S}_k'\mathbf{W}_k^{-1}\mathbf{C}) (\mathbf{K}^{-1}\mathbf{S}_{new} - \mathbf{K}^{-1}\mathbf{C}'\mathbf{W}_k^{-1}\mathbf{S}_k)$$
+
+From here, we can multiply the binomial brackets to give us exactly the terms 2.-5. in $\mathcal{I}_{k+1}$ Therefore, that entire formula collapses into:
+
+$$\mathcal{I}_{k+1}=\mathcal{I}_k+\mathbf{A}'\mathbf{K}^{-1}\mathbf{A}$$
+
+where $\mathbf{A}=\mathbf{S}_{new}-\mathbf{C}'\mathbf{W}_k^{-1}\mathbf{S}_k$. Because $\mathbf{K}^{-1}$ is positive definite, the quadratic form $\mathbf{A}'\mathbf{K}^{-1}\mathbf{A}$ is mathematically guaranteed to be a PSD matrix [@sebermatrix]. Adding a PSD matrix implies an inequality defined by the Loewner partial order:
+
+$$\mathcal{I}_{k+1}\succeq\mathcal{I}_k$$
+
+A theorem of the Loewner partial order states that for Hermitian matrices, inversion reverses the inequality [@sebermatrix]. A variance matrix $\text{Var}(\tilde{\mathbf{b}})$ is Hermitian because each of its components are real numbers, and it is symmetric. Since $\mathcal{I}$ is defined to be the inverse of $\text{Var}(\tilde{\mathbf{b}})$, it is also Hermitian, therefore the theorem does apply.
+
+$$\mathcal{I}_k^{-1}\succeq\mathcal{I}_{k+1}^{-1}$$
+
+$$\text{Var}(\tilde{\mathbf{b}}_k)\succeq\text{Var}(\tilde{\mathbf{b}}_{k+1})$$
+
+This proves that incorporating intermediate temporal levels strictly produces a PSD reduction in the covariance of the bottom-level reconciled forecasts, regardless of the correlation structure of the base forecasts.
+
+#### Generalization to aggregations
+
+To get the reconciled forecasts across the hierarchy, we apply the summing matrix to the resulting bottom level of the reconciliation: $\tilde{\mathbf{y}}=\mathbf{S}_0\tilde{\mathbf{b}}$. In the research, only aggregation levels which were common across hierarchies were analyzed. Assume that the specific summing matrix to create these common aggregation levels is $\mathbf{S}_0$
+
+$$\text{Var}(\tilde{\mathbf{y}}) = \text{Var}(\mathbf{S}_0\tilde{\mathbf{b}})$$
+
+$$\text{Var}(\tilde{\mathbf{y}}) = \mathbf{S}_0 \text{Var}(\tilde{\mathbf{b}}) \mathbf{S}_0'$$
+
+We have shown that $\text{Var}(\tilde{\mathbf{b}})$ is PSD reduced by incorporating intermediate levels, therefore $\mathbf{\Delta}$ is a PSD matrix given by
+
+$$\mathbf{\Delta} = \text{Var}(\tilde{\mathbf{b}}_k) - \text{Var}(\tilde{\mathbf{b}}_{k+1}) \succeq 0$$
+
+We define $\tilde{\mathbf{y}}_k$ and $\tilde{\mathbf{y}}_{k+1}$ to be the reconciled forecasts of the common aggregation levels, from the two hierarchies:
+
+$$\tilde{\mathbf{y}}_k = \mathbf{S}_0 \tilde{\mathbf{b}}_k$$
+
+$$\tilde{\mathbf{y}}_{k+1} = \mathbf{S}_0 \tilde{\mathbf{b}}_{k+1}$$
+
+If we look at the difference of the variances of these common reconciled forecast levels
+
+$$\text{Var}(\tilde{\mathbf{y}}_k) - \text{Var}(\tilde{\mathbf{y}}_{k+1}) = \mathbf{S}_0 \text{Var}(\tilde{\mathbf{b}}_k) \mathbf{S}_0' - \mathbf{S}_0 \text{Var}(\tilde{\mathbf{b}}_{k+1}) \mathbf{S}_0'$$
+
+$$\text{Var}(\tilde{\mathbf{y}}_k) - \text{Var}(\tilde{\mathbf{y}}_{k+1}) = \mathbf{S}_0 \left( \text{Var}(\tilde{\mathbf{b}}_k) - \text{Var}(\tilde{\mathbf{b}}_{k+1}) \right) \mathbf{S}_0'$$
+
+$$\text{Var}(\tilde{\mathbf{y}}_k) - \text{Var}(\tilde{\mathbf{y}}_{k+1}) = \mathbf{S}_0 \mathbf{\Delta} \mathbf{S}_0'$$
+
+Because is $\mathbf{\Delta}$ is PSD, the quadratic form $\mathbf{S}_0 \mathbf{\Delta} \mathbf{S}_0'$ is also guaranteed to be PSD [@sebermatrix]. Therefore, we can write the following.
+
+$$\text{Var}(\tilde{\mathbf{y}}_k) - \text{Var}(\tilde{\mathbf{y}}_{k+1}) \succeq 0$$
+
+$$\text{Var}(\tilde{\mathbf{y}}_k) \succeq \text{Var}(\tilde{\mathbf{y}}_{k+1})$$
+
+#### Application to RMSE
+
+Because we have established that $\text{Var}(\tilde{\mathbf{y}}_k)\succeq\text{Var}(\tilde{\mathbf{y}}_{k+1})$, the extracted diagonal elements representing the variance of any specific individual aggregation node $i$ strictly cannot increase:
+
+$$(\text{Var}(\tilde{\mathbf{y}}_k))_{ii}\ge(\text{Var}(\tilde{\mathbf{y}}_{k+1}))_{ii}$$
+
+It follows directly that the Root Mean Squared Error (RMSE) for that node cannot increase, as $\text{RMSE}_i=\sqrt{V_{ii}}$. Furthermore, this monotonic non-increase holds true for the Normalised RMSE (NRMSE). Normalisation merely applies a strictly positive scalar divisor $c_i$ (the variance of the training data at that specific granularity) to the RMSE:
+
+$$\text{NRMSE}_i=\frac{\sqrt{V_{ii}}}{c_i}$$
+
+Since $c_i$ is a constant derived purely from historical training data and is completely independent of the reconciliation hierarchy, the inequality holds:
+
+$$(\text{NRMSE}_k)_i\ge(\text{NRMSE}_{k+1})_i$$
+
+Therefore, we guarantee in theory that adding any intermediate temporal levels to a hierarchy cannot increase the expected NRMSE at any aggregation node.
+
+#### In practice
+
+What was proven here is that for a single horizon of a base period (i.e. 28 days), the NRMSE of individual temporal aggregations do not increase. What was studied in practice is the NRMSE across a greater forecast horizon aggregated across different time series of different properties. While theoretical guarantees show that the expected NRMSE strictly does not increase for any individual aggregation, empirical applications revealed a divergence in summary statistics.
 
 \newpage

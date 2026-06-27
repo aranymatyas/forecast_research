@@ -10,4 +10,7 @@ header-includes:
   - \setlength{\belowcaptionskip}{0pt}
   - \setlength{\abovecaptionskip}{-3pt}
 geometry: margin=1in
+bibliography: references.bib
+csl: ieee.csl
+link-citations: true
 ---

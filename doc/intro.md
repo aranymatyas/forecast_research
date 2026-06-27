@@ -12,13 +12,13 @@ We are forecasting for a horizon of 3 times 28 days, so roughly three months. Th
 
 ### Temporal Reconciliation methodology
 
-The exact workings of temporal hierarchical forecast reconciliation can be read from [Forecasting with Temporal Hierarchies by Hyndman et al.](https://robjhyndman.com/papers/temporalhierarchies.pdf), and they will not be explained in depth here.
+The exact workings of temporal hierarchical forecast reconciliation can be read from @hyndmanforecasting, and they will not be explained in depth here.
 
 There were no existing libraries available which could perfectly satisfy my needs in a convenient way. I wanted to be able to define aggregations such as weekends and weekdays, which do not continiously use up all daily data, but rather skip some. To my understand there is no temporal reconciliation library in either python or R which would allow this.
 
 Consequently I made my own small python framework for this project. It allows seemless aggregation, forecasting and reconciliation for any kind of aggregation, defined either by some periodicity, or by a row in the summing matrix. For this to work, there had to be a constraint introduced which meant that I needed to introduce a so called `Base Period`. This period defined how many columns the summing matrix will have, i.e. what will be a common period for all aggregations (relative to the granularity of the bottom level). I chose this number to be 28 for our use case, meaning the biggest aggregation I could have was semi-monthly (all mentions of monthly aggregation from now on will mean this 28-day period, as established in the limitations section), but below that top level, there could be any groupings of days defined and used.
 
-By this, reconciliation could happen knowing that no matter what exact aggregations are set, the summing matrix will have 28 columns, and because of that, forecast horizons will always be multiples of this `Base Period`. This allowed me to use `Foreco` or its python port `Forecopy` to simply reconcile my forecasts, as if they were regular hierarchical forecasts, not temporal. The framework does this by flattening out the forecasts to match the summing matrix exactly, to basically abandon the idea of temporality. Take the situation where we have monthly, weekly and daily forecasts at a horizon of $3 \times 28$ days: I will have 3 monthly forecasts, 12 weekly, and 84 daily ones. Simply these forecasts do not allow us to calculate covariance, since there are different amounts of forecasts. So instead we flatten these so that we will have more virtual variables, with exactly the same amount of (samples): 1 row of forecasts will contain the following values as a flat vector: (1 monthly | 4 weekly | 28 daily), essentially transforming the 12 weekly forecasts to 3 sets of forecasts for $week_1, week_2, week_3, week_4$.
+By this, reconciliation could happen knowing that no matter what exact aggregations are set, the summing matrix will have 28 columns, and because of that, forecast horizons will always be multiples of this `Base Period`. This allowed me to use `Foreco` or its python port `Forecopy` [@forecopy] to simply reconcile my forecasts, as if they were regular hierarchical forecasts, not temporal. The framework does this by flattening out the forecasts to match the summing matrix exactly, to basically abandon the idea of temporality. Take the situation where we have monthly, weekly and daily forecasts at a horizon of $3 \times 28$ days: I will have 3 monthly forecasts, 12 weekly, and 84 daily ones. Simply these forecasts do not allow us to calculate covariance, since there are different amounts of forecasts. So instead we flatten these so that we will have more virtual variables, with exactly the same amount of (samples): 1 row of forecasts will contain the following values as a flat vector: (1 monthly | 4 weekly | 28 daily), essentially transforming the 12 weekly forecasts to 3 sets of forecasts for $week_1, week_2, week_3, week_4$.
 
 The advantage of this setup is that for periodic aggregations we can fit a base forecast model using the whole continiously aggregated history, which is only broken up/flattened afterwards, allowing for likely better predictions.
 
@@ -41,31 +41,31 @@ The workflow was the following
 
 1. Choosing dataset and filtering out a subset of it for faster computation
 
-The dataset chosen for this was a Wikipedia Web traffic dataset, which will be described in depth later.
+    The dataset chosen for this was a Wikipedia Web traffic dataset, which will be described in depth later.
 
 2. Train and validation set
 
-In the way explained before, I cut of a portion of the historical data to serve as valiation set, and kept the rest as training data.
+    In the way explained before, I cut of a portion of the historical data to serve as valiation set, and kept the rest as training data.
 
 3. Defining hierarchies
 
-Each section will look at the performance of different temporal hierarchies, these will be well defined at the beginning of sections
+    Each section will look at the performance of different temporal hierarchies, these will be well defined at the beginning of sections
 
 4. Base Forecasts
 
-I used my small framework to make base predictions for each aggregation level in each hierarchy. The forecast model used for these independent base forecasts is AutoETS.
+    I used my small framework to make base predictions for each aggregation level in each hierarchy. The forecast model used for these independent base forecasts is AutoETS.
 
 5. Reconciliation
 
-I used shrinkage based minT reconciliation, in all hierarchies to have the base forecasts reconciled, independently per hierarchy. The reason I chose shrinkage method, is because this dataset did not provide sufficient residuals for more sophisticated covariance approximation methods, so this was the most advanced one, which I also read to perform quite well in research papers.
+    I used shrinkage based minT reconciliation, in all hierarchies to have the base forecasts reconciled, independently per hierarchy. The reason I chose shrinkage method, is because this dataset did not provide sufficient residuals for more sophisticated covariance approximation methods, so this was the most advanced one, which also performs quite well in research papers [@hyndmanmint].
 
 6. Error calculation
 
-I then used my small framework to calculate 4 distinct error metrics of these base and reconciled forecasts, for each hierarchy, and both daily and monthly granularity. I then saved these error metrics, and discarded the actual forecasts, as they are not needed.
+    I then used my small framework to calculate 4 distinct error metrics of these base and reconciled forecasts, for each hierarchy, and both daily and monthly granularity. I then saved these error metrics, and discarded the actual forecasts, as they are not needed.
 
 7. Error Analysis
 
-Out of the 4 different error metrics, I will first analyse the normalized root mean square error metrics in this notebook. The normalisation happens by dividing the RMSE of the forecasts by the variance of the train set, to make the errors comparable across the various different time series. The other error metrics will be addressed concisely later on as well.
+    Out of the 4 different error metrics, I will first analyse the normalized root mean square error metrics in this notebook. The normalisation happens by dividing the RMSE of the forecasts by the variance of the train set, to make the errors comparable across the various different time series. The other error metrics will be addressed concisely later on as well.
 
 #### Dictionary
 
@@ -105,7 +105,7 @@ In this final draft, code snippets will not be shown for less confusion. Every p
 
 #### Dataset preprocessing
 
-The dataset I am using in this paper is Google's [Web Traffic Time Series Forecasting](https://www.kaggle.com/competitions/web-traffic-time-series-forecasting/data). In its raw form it has 145k independent time series describing the web traffic of various wikipedia pages. Due to the nature of the data source, there are many different kinds of time series with different properties, hence why I chose this.
+The dataset I am using in this paper is Google's [@kaggle_web_traffic_2017]. In its raw form it has 145k independent time series describing the web traffic of various wikipedia pages. Due to the nature of the data source, there are many different kinds of time series with different properties, hence why I chose this.
 
 Additional reasons for why the dataset was chosen:
 

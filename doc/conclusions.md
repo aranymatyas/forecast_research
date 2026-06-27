@@ -10,9 +10,6 @@ Nonetheless at top level - monthly granularity - we could show that the theory d
 
 This means that supposedly, this method of adding arbitrary aggregation levels below (or even above) our target aggregation, can meaningfully improve forecast accuracy, at the cost of computation time, and by satisfying the requirement of having to access some lower granularity level of the data (e.g. if we want to precisely forecast monthly data, we need to have some higher granularity resolution of the data, for example, daily, as it was in our case).
 
-### Sources
+\newpage
 
-- [Wickramasuriya, S. L., Athanasopoulos, G., & Hyndman, R. J. (2017). Optimal forecast reconciliation for hierarchical and grouped time series through trace minimization, Section 2.2](https://robjhyndman.com/papers/MinT.pdf)
-- [George Athanasopoulosa, Rob J. Hyndmana, Nikolaos Kourentzesb, Fotios Petropoulosc. Forecasting with Temporal Hierarchies](https://robjhyndman.com/papers/temporalhierarchies.pdf)
-- [Chan, Univ. of Sydney. Restricted Least Squares](https://www.maths.usyd.edu.au/u/jchan/GLM/RestrictedLeastSquares.pdf)
-- [FoRecoPy documentation](https://danigiro.github.io/FoRecoPy/)
+## Sources

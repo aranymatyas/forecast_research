@@ -9,4 +9,4 @@ pandoc  metadata.yaml \
         sampled_hierarchies.md \
         proof.md \
         conclusions.md \
-        -o onlab_arany_matyas.pdf --toc
+        -o ${DOC:-compiled.pdf} --toc --citeproc
