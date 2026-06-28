@@ -2,6 +2,17 @@
 title: "Improvability of fixed target granularity forecast precision by aggregation and reconciliation"
 author: "Arany Matyas"
 header-includes:
+  - \usepackage{etoolbox}
+  - \usepackage{colortbl}
+  - \usepackage{array}
+  - \usepackage{graphicx}
+  - \renewcommand{\arraystretch}{1.4}
+  - \setlength{\aboverulesep}{0pt}
+  - \setlength{\belowrulesep}{0pt}
+  - \makeatletter
+  - \def\midrule{\noalign{\hrule height 0.5pt}}
+  - \apptocmd{\LT@tabularcr}{\noalign{\hrule height 0.2pt}}{}{}
+  - \makeatother
   - \usepackage{titlesec}
   - \titleformat{\paragraph}[hang]{\normalfont\normalsize\bfseries}{}{0em}{}
   - \titlespacing*{\paragraph}{0pt}{3.25ex plus 1ex minus .2ex}{1em}

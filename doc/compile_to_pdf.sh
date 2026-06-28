@@ -9,4 +9,5 @@ pandoc  metadata.yaml \
         sampled_hierarchies.md \
         proof.md \
         conclusions.md \
-        -o ${DOC:-compiled.pdf} --toc --citeproc
+        -o ${DOC:-compiled.pdf} \
+        --toc --filter pandoc-include --citeproc --lua-filter autolabel.lua 2>&1 | tail -5

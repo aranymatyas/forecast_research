@@ -58,15 +58,15 @@ First checking the statistics of the NRMSE errors across hierarchies in both dai
 
 ##### Days
 
-![Statistics of NRMSE values of daily granularity forecasts](resource/baseline_hierarchies/daily_stats.png)
+!include resource/baseline_hierarchies/daily_stats.md
 
-Here we can see that at daily granularity, the median error across the different hierarchies are roughly the same, all of them being higher than the base forecast error median (the same is true for percentiles up until the 75th). The mean is single digit only at the base forecasts and at the minimal hierarchy, where we can see from the max value that no new significant outlier was introduced, unlike other hierarchies, which all have extreme outliers above the 90th percentile which make the mean and variance of the errors meaningless and uncomparable.
+Here in \autoref{baseline_hierarchies/daily_stats} we can see that at daily granularity, the median error across the different hierarchies are roughly the same, all of them being higher than the base forecast error median (the same is true for percentiles up until the 75th). The mean is single digit only at the base forecasts and at the minimal hierarchy, where we can see from the max value that no new significant outlier was introduced, unlike other hierarchies, which all have extreme outliers above the 90th percentile which make the mean and variance of the errors meaningless and uncomparable.
 
 We must note that `Minimal` hierarchy achieved the best median error after reconciliation.
 
 ##### Months
 
-![Statistics of NRMSE values of monthly granularity forecasts](resource/baseline_hierarchies/monthly_stats.png)
+!include resource/baseline_hierarchies/monthly_stats.md
 
 At monthly granularity we can see that the medians across the different hierarchies are similar still, but they are all improvements compared to the base forecast error. We can see worsening of reconciled forecasts only at the 90th percentile. It is clear that outliers were present in the base forecasts as well, and in most hierarchies, except Minimal, they were all 'amplified'. The mean and variance are still uncomparable due to extreme outliers present.
 
@@ -78,7 +78,7 @@ When making plots from the error data, I frequently filtered out the extreme out
 
 ##### QQ Plots
 
-In this section I will look at various QQ plots to compare distributions between errors of different kinds. First I will look at the relationship between the reconciled errors in the same hierarchy at the daily and monthly granularity level. The two hierarchies showcases here will be `Semantic` and `Minimal` since there was not much visible difference between the hierarchies, and these two are the two most extreme (all possible aggregations vs. none).
+In this section I will look at various QQ plots to compare distributions between errors of different kinds. First I will look at the relationship between the reconciled errors in the same hierarchy at the daily and monthly granularity level. The two hierarchies showcases here will be `Semantic` and `Minimal` since there was not much visible difference between the hierarchies, and these two are the two most extreme (all possible aggregations vs. none). Visible at \autoref{baseline_hierarchies/minimal_qq}
 
 ![QQ plot of monthly vs. daily NRMSE values by Minimal reconciliation](resource/baseline_hierarchies/minimal_qq.png)
 
@@ -149,13 +149,13 @@ Here in this section we calculate the differences in errors from the base foreca
 
 #### Difference statistics
 
-![Statistics of daily granularity NRMSE metric differences](resource/baseline_hierarchies/daily_diff_stats.png)
+!include resource/baseline_hierarchies/daily_diff_stats.md
 
 On daily level the median of the change is slightly positive in all hierarchies, meaning more than half the time, the errors increased. Due to the outliers in the positive range the mean and variance are meaningless to look at. Note that it does make sense that there are no outliers with negative sign.
 
 The smallest median difference is with `Minimal` hierarchy. Also this hierarchy does not have any extreme outliers in terms of error difference, proven by the max and also the 90th percentile.
 
-![Statistics of monthly granularity NRMSE metric differences](resource/baseline_hierarchies/monthly_diff_stats.png)
+!include resource/baseline_hierarchies/monthly_diff_stats.md
 
 On months level the median change is always negative, meaning more than half the cases, there was in improvement made to the errors.
 
@@ -165,19 +165,19 @@ The best median improvements on monthly granularity come from the `Semantic` hie
 
 Now we check the statistics of the errors, but after filtering them for positive and negative values to try and get more information.
 
-![Statistics of positive daily granularity NRMSE metric differences](resource/baseline_hierarchies/daily_diff_pos_stats.png)
+!include resource/baseline_hierarchies/daily_diff_pos_stats.md
 
 For positive only differences at daily granularity, `Minimal` has the lowest mean and median and variance, as we already suspected from the plots and previous stats. `Semantic` hierarchy has the worst median at daily granularity positive error diffs/ From the counts we can see that the lowest number of error increases at daily granularity happened with `Minimal` hierarchy
 
-![Statistics of negative daily granularity NRMSE metric differences](resource/baseline_hierarchies/daily_diff_neg_stats.png)
+!include resource/baseline_hierarchies/daily_diff_neg_stats.md
 
 As for negative diffs on daily granularity, the lowest median is with `Semantic` hierarchy. The biggest value (so the worst median) is with the `Minimal` hierarchy. `Minimal` has the biggest number of improved errors. We already saw from the plots that Minimal hierarchy had a consistent, but not very great performance at daily granularity. We can see from the counts that `Semantic` had the lowest number of improvements in difference.
 
-![Statistics of positive monthly granularity NRMSE metric differences](resource/baseline_hierarchies/monthly_diff_pos_stats.png)
+!include resource/baseline_hierarchies/monthly_diff_pos_stats.md
 
 On monthly level, in terms of positive changes the medians are very similar across the different hierarchies. From the 90th percentiles `Semantic` seems the best. The worst q90 value is at the `Minimal` hierarchy. It is interesting to see how consistent the number of positive diffs are, across all hierarchies, there are roughly 6400.
 
-![Statistics of negative monthly granularity NRMSE metric differences](resource/baseline_hierarchies/monthly_diff_neg_stats.png)
+!include resource/baseline_hierarchies/monthly_diff_neg_stats.md
 
 In terms of negative differences (improvements) at monthly granularity, the medians look very similar still. From the 75th percentile we can see that `Minimal` performs the worst, and `Semantic` performs best.
 
@@ -303,11 +303,11 @@ It is apparent that in almost half the cases, `Semantic` decreased the error at 
 
 Let us look back at the plain statistics of the reconciled forecast errors of both hierarchies, but now with the top 1% of values filtered out, to make the mean and variance statistics more reliable and meaningful, without the extreme outliers' distortion.
 
-![Statistics of daily NRMSE errors, with outliers filtered out](resource/baseline_hierarchies/daily_stats_no_outlier.png)
+!include resource/baseline_hierarchies/daily_stats_no_outlier.md
 
 From the daily error filtered statistics, we can still see that `Minimal` achieved slightly lower median error (with other qunatiles going back and forth, as we have already seen from the QQ plots), but it in fact achieved worse mean error, by a slight difference. The variances of the errors are very similar, with slighly higher one for `Minimal`
 
-![Statistics of monthly NRMSE errors, with outliers filtered out](resource/baseline_hierarchies/monthly_stats_no_outlier.png)
+!include resource/baseline_hierarchies/monthly_stats_no_outlier.md
 
 At monthly granularity, `Semantic` achieves lower median error, lower mean error and lower variance (by a much bigger margin). All other percentiles favor `Semantic` also, as we have already seen in the QQ plots.
 

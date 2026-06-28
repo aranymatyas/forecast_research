@@ -9,7 +9,7 @@ data/
 TODO.md
 metrics/**_raw.csv
 sample/
-doc/paper.pdf
+doc/**.pdf
 
 # For now
 fareco_demo.qmd

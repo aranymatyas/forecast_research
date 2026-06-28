@@ -44,13 +44,13 @@ First I will look at the statistics of the reconciled forecast errors per hierar
 
 #### Daily
 
-![Daily NRMSE error statistics](resource/binary_hierarchies/daily_stats.png)
+!include resource/binary_hierarchies/daily_stats.md
 
 Looking at daily granularity error statistics, we can see that the two new hierarchies did introduce extreme outliers, so the means and variances are not comparable. Note that these outliers' magnitudes are several orders of magnitude smaller still.
 
 From the medians, it's visible that the two new hierarchies did not worsen the performance much when looking at the medians. There is very little difference between the median of `Full` and `Binary`. Their q75 and q90 percentiles are smaller than either `Minimal`'s or `Semantic`'s, which suggests generally smaller big errors. Where these hierarchies are significantly lacking, are the smaller percentiles, where they achieve significantly bigger values, meaning bigger small errors.
 
-![Daily NRMSE error statistics with outliers filtered out](resource/binary_hierarchies/daily_no_outlier_stats.png)
+!include resource/binary_hierarchies/daily_no_outlier_stats.md
 
 When sorting out the super extreme outliers, we can get some more meaningful insights from the means and variances.
 
@@ -58,7 +58,7 @@ When looking at the means, `Full` hierarchy performs best. Though there is not a
 
 #### Monthly
 
-![Monthly NRMSE error statistics](resource/binary_hierarchies/monthly_stats.png)
+!include resource/binary_hierarchies/monthly_stats.md
 
 Looking at monthly granularity error statistics, it is apparent how big the differences are in the means. `Full` hierarchy achieved the best value, being half as much as `Semantic`'s mean, and also being smaller than `Minimal`'s mean, which we know is not distorted by super extreme outliers. `Full` itself did not introduce any extreme outliers, as it is apparent by the maximum value. This produces an undistorted variance value, which is smaller than `Minimal`'s.
 
@@ -66,7 +66,7 @@ Looking at monthly granularity error statistics, it is apparent how big the diff
 
 The worst performance out of these hierarchies is still `Minimal`, which also lost it's advantage of being the only hierarch not producing extreme outliers.
 
-![Monthly NRMSE error statistics with outliers filtered out](resource/binary_hierarchies/monthly_no_outlier_stats.png)
+!include resource/binary_hierarchies/monthly_no_outlier_stats.md
 
 When sorting out the extreme outliers, we more reliably compare the means and variances. Still `Full` has the smallest mean monthly error, and also the smallest variance.
 
@@ -123,29 +123,29 @@ Next we look at the statistics of the error differences, both raw (but with top 
 
 ##### Daily error differences
 
-![Statistics of daily granularity NRMSE error differences with outliers filtered out](resource/binary_hierarchies/daily_diff_stats.png)
+!include resource/binary_hierarchies/daily_diff_stats.md
 
 Looking at daily error difference statistics, with outliers sorted out, `Full` has the smallest mean, the highest variance, and biggest median. In terms of the mean, variance, and median, a trend can be observed between the four hierarchies: `Full` favored by lowest mean, `Minimal` favored by lowest median, and vica versa.
 
-![Statistics of positive daily granularity NRMSE error differences with outliers filtered out](resource/binary_hierarchies/daily_diff_pos_stats.png)
+!include resource/binary_hierarchies/daily_diff_pos_stats.md
 
 When looking at daily positive error differences, with outliers sorted out, we can see that `Full` has the most amount of cases (as we already saw in the heatmap matrix), with a visible trend across the four hierarchies. `Full` also has the largest mean with a visible trend. Variance values look all over the place, with `Semantic` having the smallest. In terms of median values, there is a visible trend, with `Full` having the largest value.
 
-![Statistics of negative daily granularity NRMSE error differences with outliers filtered out](resource/binary_hierarchies/daily_diff_neg_stats.png)
+!include resource/binary_hierarchies/daily_diff_neg_stats.md
 
 When looking at daily negative error differences, with outliers sorted out, `Full` has the smallest mean, with a visible trend, but it also has the biggest variance, also with a visible trend. `Full` has the smallest median, with an apparent trend, which propagates through basically all the percentiles.
 
 ##### Monthly error differences
 
-![Statistics of monthly granularity NRMSE error differences with outliers filtered out](resource/binary_hierarchies/monthly_diff_stats.png)
+!include resource/binary_hierarchies/monthly_diff_stats.md
 
 Looking at monthly error difference statistics, with outliers sorted out, `Full` has the smallest mean, smallest variance, second smallest median (with `Semantic` having the smallest). When looking at the progression of mean and variance in order of the hierarchies, a trend can be seen, where the more aggregation levels seem to provide bigger mean error decreases, and lesser variation in the changes.
 
-![Statistics of positive monthly granularity NRMSE error differences with outliers filtered out](resource/binary_hierarchies/monthly_diff_pos_stats.png)
+!include resource/binary_hierarchies/monthly_diff_pos_stats.md
 
 When looking at monthly positive error differences, with outliers sorted out, we can see that the counts of samples are the same between the four hierarchies. `Full` has the smallest mean and variance, both of which have a noticable trend among the hierarchies. The median values are very similar and close across the four hierarchies, but `Semantic` is the smallest. Above the 75th percentile, it seems like a trend favoring `Full` becomes visible.
 
-![Statistics of negative monthly granularity NRMSE error differences with outliers filtered out](resource/binary_hierarchies/monthly_diff_neg_stats.png)
+!include resource/binary_hierarchies/monthly_diff_neg_stats.md
 
 When looking at monthly negative error differences, with outliers sorted out, the mean and variance is very similar across the hierarchies. `Full` has smallest mean however. It also has the smallest median value, which has a visible trend.
 
@@ -229,13 +229,13 @@ Here we can see that in more than half cases, `Full` produced better monthly err
 
 **Statistics**
 
-![Statistics of hierarchy differences between `Full` and `Semantic` with no outliers](resource/binary_hierarchies/full_sem_stats.png)
+!include resource/binary_hierarchies/full_sem_stats.md
 
 Looking at the error difference statistics, with both outlier ends removed, the mean of difference is negative in both granularities, meaning on average, `Full` produced slightly better reconciled forecasts. The median is positive in daily case (as we saw with signs), and negative in the monthly case.
 
-![Statistics of daily hierarchy differences of `Full` and `Semantic` vs `Minimal` with no outliers](resource/binary_hierarchies/full_min_day_stats.png)
+!include resource/binary_hierarchies/full_min_day_stats.md
 
-![Statistics of monthly hierarchy differences of `Full` and `Semantic` vs `Minimal` with no outliers](resource/binary_hierarchies/full_min_month_stats.png)
+!include resource/binary_hierarchies/full_min_month_stats.md
 
 Looking at the statistics of these differences, we can see that the daily median is positive, meaning in more than half the cases, `Full` hierarchy performed worse (unlike how it was with `Semantic`). The mean of difference is smaller than it was with `Semantic`, at both granularities.
 
