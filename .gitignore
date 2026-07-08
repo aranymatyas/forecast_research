@@ -15,3 +15,7 @@ doc/**.pdf
 fareco_demo.qmd
 thief_demo.qmd
 web_traffic.qmd
+
+doc/paper/.build
+doc/paper/.old
+doc/paper/**.pdf
