@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from datetime import timedelta
+from typing import Literal
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -31,10 +32,14 @@ def plot_nans(df: pd.DataFrame):
     return fig
 
 
-def plot_heatmap(df: pd.DataFrame, log = False):
-    ''' Plots the heatmap of values in the time series. Optimal for wide format. Highlights NaNs '''
+def plot_heatmap(df: pd.DataFrame, log = False, last_n_days: int | None = None):
+    ''' Plots the heatmap of values in the time series. Optimal for wide format. Highlights NaNs.
+        last_n_days: if set, only plot the last N days (rows) of the DataFrame. '''
     if is_long(df):
         df = long_to_wide(df)
+
+    if last_n_days is not None:
+        df = df.iloc[-last_n_days:]
 
     if log:
         df_vals = np.log(df.where(df > 0))
@@ -375,7 +380,7 @@ def plot_sampled_error_matrix(sh: SampledHierarchies, value: str, *,
 
     all_stats = sh.error_matrix(em, index_matrix, df_filter) if stats_matrix is None else stats_matrix
     stats = np.vectorize(lambda s: s[value].item())(all_stats)
-    fig = px.imshow(stats, labels={"x": "Heights", "y": "Group IDs", "color": "Error"},
+    fig = px.imshow(stats, labels={"x": "Heights", "y": "Sequence IDs", "color": "Error"},
                 x=sh.heights, y=sh.group_ids,
                 text_auto=f'.{accuracy}f')
     fig.update_xaxes(tickmode='array', tickvals=sh.heights)
@@ -394,3 +399,104 @@ def plot_aggregate_statistics(aggregates: MetricAggregate, title_suffix=''):
     fig.update_layout(title=f'{aggregates} {title_suffix}', xaxis_title=aggregates.group_by, yaxis_title=aggregates.stat)
     fig.update_yaxes(range=[aggregates.values.min() * 0.8, aggregates.values.max() * 1.05])
     return fig
+
+
+def latex_sampled_error_table(sh: SampledHierarchies, value: str, *,
+                              em: ErrorMetrics | None=None, index_matrix: IndexMatrix | None=None, stats_matrix: StatsMatrix | None=None,
+                              df_filter: MetricsFilter=None,
+                              caption: str = '', label: str = '', precision: int = 4) -> str:
+    """Generate a copy-pasteable LaTeX table from a sampled hierarchy error matrix.
+    
+    Same interface as plot_sampled_error_matrix, but produces LaTeX output.
+    
+    Args:
+        sh: SampledHierarchies object
+        value: stat to extract (e.g. 'mean', 'median', 'winsorized')
+        em: ErrorMetrics object (optional if stats_matrix provided)
+        index_matrix: IndexMatrix (optional if stats_matrix provided)
+        stats_matrix: pre-computed stats matrix (optional)
+        df_filter: filter to apply to error dataframe
+        caption: LaTeX table caption
+        label: LaTeX table label for \\ref{}
+        precision: decimal places
+    
+    Returns:
+        Complete LaTeX table string ready to paste into paper.
+    """
+    if stats_matrix is None and (em is None or index_matrix is None):
+        raise ValueError('Either stats_matrix or both em and index_matrix need to be specified')
+
+    all_stats = sh.error_matrix(em, index_matrix, df_filter) if stats_matrix is None else stats_matrix
+    matrix = np.vectorize(lambda s: s[value].item())(all_stats)
+
+    n_rows, n_cols = matrix.shape
+    fmt = f'.{precision}f'
+    heights = sh.heights
+
+    lines = []
+    lines.append(r'\begin{table*}[h]')
+    lines.append(f'\\caption{{{caption}}}\\label{{{label}}}')
+    lines.append(r'\begin{tabular*}{\textwidth}{@{\extracolsep\fill}l' + 'c' * n_cols + '}')
+    lines.append(r'\toprule')
+    lines.append('Heights & ' + ' & '.join(str(h) for h in heights) + r' \\')
+    lines.append(r'\midrule')
+
+    for i in range(n_rows):
+        vals = ' & '.join(f'{v:{fmt}}' for v in matrix[i])
+        lines.append(f'Sequence {sh.group_ids[i]} & {vals} \\\\')
+
+    lines.append(r'\midrule')
+    mean_vals = ' & '.join(f'{v:{fmt}}' for v in matrix.mean(axis=0))
+    std_vals = ' & '.join(f'{v:{fmt}}' for v in matrix.std(axis=0))
+    lines.append(f'Mean & {mean_vals} \\\\')
+    lines.append(f'Std & {std_vals} \\\\')
+
+    lines.append(r'\botrule')
+    lines.append(r'\end{tabular*}')
+    lines.append(r'\end{table*}')
+
+    result = '\n'.join(lines)
+    print(result)
+    return result
+
+def latex_conformism_table(sh: SampledHierarchies, rows: dict[str, StatsMatrix], value: str,
+                           trend: Literal['increase', 'decrease'], *,
+                           caption: str = '', label: str = '', precision: int = 1) -> str:
+    """Generate a LaTeX table showing theorem conformism percentages per group.
+
+    Args:
+        sh: SampledHierarchies object
+        rows: dict mapping row labels to their StatsMatrix, e.g.
+              {"Monthly (\\%)": month_stats, "Daily (\\%)": day_stats}
+        value: stat to extract (e.g. 'mean', 'winsorized')
+        trend: 'increase' or 'decrease'
+        caption: LaTeX table caption
+        label: LaTeX table label for \\ref{}
+        precision: decimal places for percentages
+
+    Returns:
+        Complete LaTeX table string ready to paste into paper.
+    """
+    n_groups = len(sh.group_ids)
+    fmt = f'.{precision}f'
+
+    lines = []
+    lines.append(r'\begin{table*}[h]')
+    lines.append(f'\\caption{{{caption}}}\\label{{{label}}}')
+    lines.append(r'\begin{tabular*}{\textwidth}{@{\extracolsep\fill}l' + 'c' * n_groups + '}')
+    lines.append(r'\toprule')
+    lines.append('Sequence & ' + ' & '.join(str(gid) for gid in sh.group_ids) + r' \\')
+    lines.append(r'\midrule')
+
+    for row_label, stats_matrix in rows.items():
+        values = sh.trend_check_per_group(stats_matrix, value, trend) * 100
+        vals = ' & '.join(f'{v:{fmt}}' for v in values)
+        lines.append(f'{row_label} & {vals} \\\\')
+
+    lines.append(r'\botrule')
+    lines.append(r'\end{tabular*}')
+    lines.append(r'\end{table*}')
+
+    result = '\n'.join(lines)
+    print(result)
+    return result

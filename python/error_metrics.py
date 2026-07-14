@@ -166,9 +166,10 @@ class ErrorMetrics:
                                                    lambda x: x.quantile(0.1),
                                                    lambda x: x.quantile(0.25),
                                                    lambda x: x.quantile(0.75),
-                                                   lambda x: x.quantile(0.9)],
+                                                   lambda x: x.quantile(0.9),
+                                                   lambda x: x.clip(lower=x.quantile(0.001), upper=x.quantile(0.999)).mean()],
                                                    axis=1)
-        stats.columns = ['count', 'mean', 'std', 'min', 'max', 'median', 'q10', 'q25', 'q75', 'q90']
+        stats.columns = ['count', 'mean', 'std', 'min', 'max', 'median', 'q10', 'q25', 'q75', 'q90', 'winsorized']
         stats = index.rows(stats)
         return stats
 
