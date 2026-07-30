@@ -216,24 +216,37 @@ class ViewErrorMetrics(ErrorMetrics):
         raise NotImplementedError
 
 class MergedErrorMetrics(ViewErrorMetrics):
-    def __init__(self, error_metrics_list: list[ErrorMetrics]):
+    def __init__(self, error_metrics_list: list[ErrorMetrics], direction: Literal['vertical', 'horizontal'] = 'vertical'):
         super().__init__()
         self.error_metrics_list = error_metrics_list
+        self.axis = 0 if direction == 'vertical' else 1
 
     def calc_error_metrics(self, benchmark_aggregations: list[Aggregation] = [DAYS, MONTHS]):
         if benchmark_aggregations is not None:
             # Called manually
-            self._metrics = pd.concat([em.calc_error_metrics(benchmark_aggregations).metrics for em in self.error_metrics_list])
+            self._metrics = pd.concat([em.calc_error_metrics(benchmark_aggregations).metrics for em in self.error_metrics_list], axis=self.axis)
         else:
             # Called by property
-            self._metrics = pd.concat([em.metrics for em in self.error_metrics_list])
+            self._metrics = pd.concat([em.metrics for em in self.error_metrics_list], axis=self.axis)
+
+        if self.axis == 1:
+            # Remove duplicate columns, keep first occurrence
+            self._metrics = self._metrics.loc[:, ~self._metrics.columns.duplicated(keep='first')]
         return self
 
     def calc_ts_columns(self):
-        ts_cols = [em.ts_columns for em in self.error_metrics_list]
-        if not all(cols == ts_cols[0] for cols in ts_cols):
-            raise ValueError("All ErrorMetrics must have the same ts_columns")
-        self._ts_columns = ts_cols[0]
+        if self.axis == 0:
+            ts_cols = [em.ts_columns for em in self.error_metrics_list]
+            if not all(cols == ts_cols[0] for cols in ts_cols):
+                raise ValueError("All ErrorMetrics must have the same ts_columns")
+            self._ts_columns = ts_cols[0]
+        else:
+            ts_cols = []
+            for em in self.error_metrics_list:
+                for col in em.ts_columns:
+                    if col not in ts_cols:
+                        ts_cols.append(col)
+            self._ts_columns = ts_cols
         return self
 
     def drop_cols(self, cols: list[str]):

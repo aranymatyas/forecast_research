@@ -401,14 +401,83 @@ def plot_aggregate_statistics(aggregates: MetricAggregate, title_suffix=''):
     return fig
 
 
+def latex_stats_table(stats_df: pd.DataFrame, stat: str,
+                      label_index: str, *,
+                      stat_label: str | None = None,
+                      label_map: dict[str, str] | None = None,
+                      caption: str = '', label: str = '', precision: int = 4) -> str:
+    """Generate a simple two-column LaTeX table from error stats DataFrame.
+
+    Produces a table like:
+        Granularity & Winsorized Mean NRMSE \\
+        Months & 0.9850 \\
+        Days & 1.2355 \\
+
+    Args:
+        stats_df: DataFrame returned by em.get_error_stats(index), indexed by INDEX_COLS.
+        stat: which stat column to display (e.g. 'winsorized', 'mean', 'median').
+        label_index: which index level to use as row labels.
+        stat_label: column header for the stat column. If None, auto-generated from stat name.
+        label_map: optional dict to rename index values (e.g. {'Days': 'Days', 'Months': 'Months'}).
+        caption: LaTeX table caption.
+        label: LaTeX table label for \\ref{}.
+        precision: decimal places.
+
+    Returns:
+        Complete LaTeX table string ready to paste into paper.
+    """
+    if stat not in stats_df.columns:
+        raise ValueError(f"Stat '{stat}' not found in DataFrame columns: {list(stats_df.columns)}")
+
+    # Extract the label level and stat values
+    if isinstance(stats_df.index, pd.MultiIndex):
+        level_values = stats_df.index.get_level_values(label_index)
+    else:
+        level_values = stats_df.index
+
+    values = stats_df[stat].values
+    fmt = f'.{precision}f'
+
+    # Apply label mapping if provided
+    row_labels = [label_map.get(str(lv), str(lv)) if label_map else str(lv) for lv in level_values]
+
+    # Auto-generate stat label
+    if stat_label is None:
+        stat_label = stat.replace('_', ' ').title()
+
+    # Build LaTeX
+    label_col_header = label_index.replace('_', ' ').title()
+
+    lines = []
+    lines.append(r'\begin{table}[h]')
+    if caption:
+        label_str = f'\\label{{tab:{label}}}' if label else ''
+        lines.append(f'\\caption{{{caption}}}{label_str}')
+    lines.append(r'\begin{tabular}{@{}ll@{}}')
+    lines.append(r'\toprule')
+    lines.append(f'{label_col_header} & {stat_label} \\\\')
+    lines.append(r'\midrule')
+
+    for row_label, val in zip(row_labels, values):
+        lines.append(f'{row_label} & {val:{fmt}} \\\\')
+
+    lines.append(r'\botrule')
+    lines.append(r'\end{tabular}')
+    lines.append(r'\end{table}')
+
+    result = '\n'.join(lines)
+    print(result)
+    return result
+
+
 def latex_sampled_error_table(sh: SampledHierarchies, value: str, *,
                               em: ErrorMetrics | None=None, index_matrix: IndexMatrix | None=None, stats_matrix: StatsMatrix | None=None,
                               df_filter: MetricsFilter=None,
                               caption: str = '', label: str = '', precision: int = 4) -> str:
     """Generate a copy-pasteable LaTeX table from a sampled hierarchy error matrix.
-    
+
     Same interface as plot_sampled_error_matrix, but produces LaTeX output.
-    
+
     Args:
         sh: SampledHierarchies object
         value: stat to extract (e.g. 'mean', 'median', 'winsorized')
@@ -419,7 +488,7 @@ def latex_sampled_error_table(sh: SampledHierarchies, value: str, *,
         caption: LaTeX table caption
         label: LaTeX table label for \\ref{}
         precision: decimal places
-    
+
     Returns:
         Complete LaTeX table string ready to paste into paper.
     """
@@ -435,7 +504,7 @@ def latex_sampled_error_table(sh: SampledHierarchies, value: str, *,
 
     lines = []
     lines.append(r'\begin{table*}[h]')
-    lines.append(f'\\caption{{{caption}}}\\label{{{label}}}')
+    lines.append(f'\\caption{{{caption}}}\\label{{tab:{label}}}')
     lines.append(r'\begin{tabular*}{\textwidth}{@{\extracolsep\fill}l' + 'c' * n_cols + '}')
     lines.append(r'\toprule')
     lines.append('Heights & ' + ' & '.join(str(h) for h in heights) + r' \\')
@@ -482,7 +551,7 @@ def latex_conformism_table(sh: SampledHierarchies, rows: dict[str, StatsMatrix],
 
     lines = []
     lines.append(r'\begin{table*}[h]')
-    lines.append(f'\\caption{{{caption}}}\\label{{{label}}}')
+    lines.append(f'\\caption{{{caption}}}\\label{{tab:{label}}}')
     lines.append(r'\begin{tabular*}{\textwidth}{@{\extracolsep\fill}l' + 'c' * n_groups + '}')
     lines.append(r'\toprule')
     lines.append('Sequence & ' + ' & '.join(str(gid) for gid in sh.group_ids) + r' \\')

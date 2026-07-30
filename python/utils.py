@@ -12,13 +12,23 @@ def fetch_dataset_m4(format: TimeSeriesFormat = "wide") -> pd.DataFrame:
     path = kagglehub.dataset_download("yogesh94/m4-forecasting-competition-dataset", output_dir="data/m4")
     X = pd.read_csv(path + '/Daily-train.csv')
 
-    # We have no real dates so assume some start
+    # Rows are series, columns are time steps. Transpose so rows = time steps.
+    X = X.set_index('V1').T
     X = move_to_float32(X)
+    X.columns.name = None
+
+    # Right-align: shift each series to the bottom so all end at the same date
+    def right_align(col):
+        valid = col.dropna().values
+        return pd.Series(np.concatenate([np.full(len(col) - len(valid), np.nan), valid]), index=col.index)
+
+    X = X.apply(right_align)
+    X = X.dropna(axis=0, how='all')
+
+    # We have no real dates so assume some start
     start_date = datetime(2000, 1, 1)
-    dates = pd.Series([start_date + timedelta(days=i) for i in range(len(X))])
-    X.insert(0, 'ds', dates)
-    X = X.set_index('ds')
-    X = X.drop(columns=['V1'])
+    X.index = pd.date_range(start=start_date, periods=len(X), freq='D')
+    X.index.name = 'ds'
 
 
     if format == "long":
@@ -65,18 +75,18 @@ def fetch_dataset_m5(format: TimeSeriesFormat = "wide"):
     with zipfile.ZipFile("data/m5/sales_train_evaluation.csv.zip", 'r') as zip_ref, \
          zip_ref.open("sales_train_evaluation.csv") as f:
         X = pd.read_csv(f)
-    
+
     # Load calendar to get real dates
     with zipfile.ZipFile("data/m5/calendar.csv.zip", 'r') as zip_ref, \
          zip_ref.open("calendar.csv") as f:
         calendar = pd.read_csv(f)
-    
+
     X = move_to_float32(X)
     X = X.drop(columns=['item_id', 'dept_id', 'cat_id', 'store_id', 'state_id'])
     X = X.set_index('id').T
     X = X.reset_index().rename(columns={'index': 'ds'})
     X.columns.name = None
-    
+
     # Map d_1, d_2, etc. to real dates using calendar
     date_mapping = dict(zip(calendar['d'], pd.to_datetime(calendar['date'])))
     X['ds'] = X['ds'].map(date_mapping)
@@ -147,16 +157,28 @@ def filter_last_days_available(df: pd.DataFrame, n_days: int = 31) -> pd.DataFra
         mask = df.tail(n_days).notna().all()
         return df[mask[mask].index.tolist()]
 
-def reduce_dataset(df: pd.DataFrame, n_series: int = 100) -> pd.DataFrame:
+def reduce_dataset(df: pd.DataFrame, end: int = 100, start: int = 0) -> pd.DataFrame:
     ''' Reduce the dataset to n_series variables '''
     if is_long(df):
         # Long Format
-        unique_ids = df['unique_id'].unique()[:n_series]
+        unique_ids = df['unique_id'].unique()[start:end]
         return df[df['unique_id'].isin(unique_ids)].reset_index(drop=True)
     else:
         # Wide Format
-        cols_to_keep = df.columns[0:n_series].tolist()
+        cols_to_keep = df.columns[start:end].tolist()
         return df[cols_to_keep]
+
+
+def filter_min_length(df: pd.DataFrame, min_days: int) -> pd.DataFrame:
+    ''' Filter out series that have fewer than min_days non-NaN observations. '''
+    if is_long(df):
+        counts = df.groupby('unique_id')['y'].count()
+        valid_ids = counts[counts >= min_days].index
+        return df[df['unique_id'].isin(valid_ids)].reset_index(drop=True)
+    else:
+        valid_counts = df.notna().sum()
+        valid_cols = valid_counts[valid_counts >= min_days].index.tolist()
+        return df[valid_cols]
 
 
 
@@ -181,16 +203,13 @@ def align_fill_and_trim_series(df: pd.DataFrame) -> pd.DataFrame:
 
     df_aligned = df_aligned.ffill()
 
-    for col in df_aligned.columns:
-        valid_mask = df_aligned[col].notna()
-        valid_count = valid_mask.sum()
-
-        remainder = valid_count % 28
-
-        if remainder > 0:
-            #Trim off start so time series is divisible by 28 days
-            first_valid_dates = df_aligned[valid_mask].index[:remainder]
-            df_aligned.loc[first_valid_dates, col] = np.nan
+    # Vectorized trimming: null out the first `remainder` valid values per column
+    # so that each series length is divisible by 28
+    notna_mask = df_aligned.notna()
+    cumvalid = notna_mask.cumsum(axis=0)
+    remainders = notna_mask.sum(axis=0) % 28
+    trim_mask = cumvalid.le(remainders, axis=1) & notna_mask
+    df_aligned = df_aligned.where(~trim_mask)
 
     df_aligned = df_aligned.dropna(axis=0, how='all')
 

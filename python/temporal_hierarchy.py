@@ -2,13 +2,13 @@ from datetime import datetime, date, timedelta
 import pandas as pd
 import numpy as np
 from typing import overload
-from statsforecast import StatsForecast
-from statsforecast.models import AutoETS
+from tqdm import tqdm
 
 from python.utils import long_to_wide, wide_to_long, is_long, get_nearest_monday
 from python.aggregation import Aggregation, DAYS, BASE_PERIOD
 from python.time_series import TimeSeries, TimeSeriesType
 from python.time_series import FULL_DATA, BASE_FORECASTS, TRAIN_SET, VALIDATION_SET, RESIDUALS, RECONCILED_FORECASTS
+from python.base_forecasting import make_forecasts
 
 class ForecastLevel:
     def __init__(self, aggregation: Aggregation):
@@ -22,36 +22,22 @@ class ForecastLevel:
     def prepare_aggregation(self, X: pd.DataFrame):
         self[FULL_DATA] = self.aggregation.aggregate_time_series(X)
 
-    def make_forecast(self, h_days: int):
-        # Remove the validation data
+    def make_forecast(self, h_days: int, model: str, n_jobs: int = -1, verbose: bool = False):
         h = h_days // self.aggregation.period
+        freq = f"{self.aggregation.period}D"
         X_train = self[FULL_DATA].wide.head(-h).copy()
         self[TRAIN_SET] = X_train
         self[VALIDATION_SET] = self[FULL_DATA].wide.tail(h)
-        # StatsForecast requires data to be in long format, but conversion is long, so we call it column by column
-        sf = StatsForecast(models=[AutoETS()], freq=f"{self.aggregation.period}D", n_jobs=-1)
-        X_cols = X_train.columns.tolist()
-        forecasts = []
-        residuals = []
-        for col in X_cols:
-            X_train_single = pd.DataFrame({
-                'ds': X_train.index.values,
-                'y': X_train[col].values,
-                'unique_id': 1
-            })
-            X_train_single = X_train_single.dropna(subset=['y'])
-            forecast = sf.forecast(df=X_train_single, h=h, fitted=True)
-            forecast = forecast.reset_index(drop=True)
-            forecast = forecast[['ds', 'AutoETS']].rename(columns={'AutoETS': col}).set_index('ds')
-            forecasts.append(forecast)
 
-            fitted = sf.forecast_fitted_values().reset_index(drop=True)
-            fitted['residual'] = fitted['y'] - fitted['AutoETS']
-            fitted = fitted[['ds', 'residual']].rename(columns={'residual': col}).set_index('ds')
-            residuals.append(fitted)
+        forecast_wide, residual_wide = make_forecasts(X_train, model, h, freq, n_jobs, verbose)
 
-        self[BASE_FORECASTS] = (pd.concat(forecasts, axis=1), 'AutoETS')
-        self[RESIDUALS] = pd.concat(residuals, axis=1)
+        # Reindex to include all original columns (short series become NaN)
+        cols = X_train.columns.tolist()
+        forecast_wide = forecast_wide.reindex(columns=cols)
+        residual_wide = residual_wide.reindex(columns=cols)
+
+        self[BASE_FORECASTS] = (forecast_wide, model)
+        self[RESIDUALS] = residual_wide
 
     @property
     def width_in_flatten(self):
@@ -134,13 +120,18 @@ class TemporalHierarchy:
 
         return self
 
-    def make_base_forecasts(self, h_days: int):
-        ''' Makes base, independent forecasts for each aggregation level '''
+    def make_base_forecasts(self, h_days: int, model: str = 'AutoETS', n_jobs: int = -1, verbose: bool = False):
+        ''' Makes base, independent forecasts for each aggregation level. Yields the hierarchy object
+        After an aggregation is done
+        '''
         if h_days % BASE_PERIOD != 0:
             raise ValueError(f"h_days must be divisible by {BASE_PERIOD}")
-        for forecast_lvl in self.forecast_levels:
+        for i, forecast_lvl in enumerate(self.forecast_levels, start=1):
             if forecast_lvl[BASE_FORECASTS] is None:
-                forecast_lvl.make_forecast(h_days)
+                if verbose:
+                    tqdm.write(f"{forecast_lvl.aggregation} {i}/{len(self.forecast_levels)}")
+                forecast_lvl.make_forecast(h_days, model=model, n_jobs=n_jobs, verbose=verbose)
+                yield self
         return self
 
     def store_reconciled_forecasts(self, reconciled_forecasts: np.ndarray, method = None):

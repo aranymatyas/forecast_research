@@ -31,13 +31,13 @@ class TestResultsLatex:
         print(self._to_table(title, star, label))
 
     def _to_table(self, title: str, star: bool, label: str) -> str:
-        headers = ["Method", "Trend", "Statistic", "p-value", "Significant"]
+        headers = ["Method", "Statistic", "p-value", "Significant"]
         num_cols = len(headers)
 
         rows = []
         for r in self.test_results:
             sig_str = "Yes" if r.significant else "No"
-            row = f"{r.method} & {r.trend_type} & {r.statistic:.4f} & {r.p_value:.6f} & {sig_str} \\\\"
+            row = f"{r.method} & {r.statistic:.4f} & {r.p_value:.6f} & {sig_str} \\\\"
             rows.append(row)
 
         header_line = " & ".join(headers) + " \\\\"

@@ -7,7 +7,7 @@ data/
 *.html
 **__pycache__/
 TODO.md
-metrics/**_raw.csv
+metrics/**/**_raw**.csv
 sample/
 doc/**.pdf
 

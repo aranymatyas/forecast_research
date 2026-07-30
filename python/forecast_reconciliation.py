@@ -2,11 +2,15 @@ import numpy as np
 import pandas as pd
 
 import forecopy as foreco
-from typing import Literal
+from typing import Literal, Callable
+from tqdm import tqdm
+from joblib import Parallel, delayed
+
 
 from python.temporal_hierarchy import TemporalHierarchy
 from python.time_series import BASE_FORECASTS, RESIDUALS
 from python.aggregation import Aggregation, DAYS, MONTHS
+from python.error_metrics import ErrorMetrics
 
 class ForecastReconciliation:
     def __init__(self, temporal_hierarchy: TemporalHierarchy):
@@ -54,3 +58,16 @@ class ForecastReconciliation:
         top_sum = top.sum(axis=0)
         return pd.DataFrame((top_sum - leaf_sum) / horizon, columns=[f'{top_level} - {leaf_level}']).T
 
+
+def reconcile_calculate_serialize_error_metrics(hierarchies: list[TemporalHierarchy], filename_func: Callable, n_jobs: int = 1, verbose: bool = False):
+    def _do_reco_calc(h: TemporalHierarchy):
+        ForecastReconciliation(h).reconcile('shr')
+        errors = ErrorMetrics(h)
+        errors.calc_error_metrics([DAYS, MONTHS])
+        errors.save(filename_func(h))
+
+    with tqdm(total=len(hierarchies), desc="Reconcile", disable=not verbose) as pbar:
+        for _ in Parallel(n_jobs=n_jobs, return_as="generator")(
+            delayed(_do_reco_calc)(h) for h in hierarchies
+        ):
+            pbar.update(1)
