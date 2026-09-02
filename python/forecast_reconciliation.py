@@ -9,7 +9,7 @@ from joblib import Parallel, delayed
 
 from python.temporal_hierarchy import TemporalHierarchy
 from python.time_series import BASE_FORECASTS, RESIDUALS
-from python.aggregation import Aggregation, DAYS, MONTHS
+from python.aggregation import Aggregation, BOTTOM_LEVEL, TOP_LEVEL
 from python.error_metrics import ErrorMetrics
 
 class ForecastReconciliation:
@@ -18,7 +18,7 @@ class ForecastReconciliation:
 
     def _get_agg_mat(self):
         agg_mat = self.temporal_hierarchy.make_summing_matrix(include_hierarchy_names=True)
-        agg_mat = agg_mat[agg_mat['hierarchy'] != 'Days'] # Drop identity part
+        agg_mat = agg_mat[agg_mat['hierarchy'] != 'Bottom'] # Drop identity part
         return agg_mat.drop(columns=['hierarchy']).values
 
     def reconcile(self, method: Literal['ols', 'str', 'wls', 'shr', 'sam'] = 'ols'):
@@ -49,7 +49,7 @@ class ForecastReconciliation:
 
         return self
 
-    def inconcistency_errors(self, top_level: Aggregation = MONTHS, leaf_level: Aggregation = DAYS):
+    def inconcistency_errors(self, top_level: Aggregation = TOP_LEVEL, leaf_level: Aggregation = BOTTOM_LEVEL):
         leaf = self.temporal_hierarchy[leaf_level][BASE_FORECASTS].wide
         top = self.temporal_hierarchy[top_level][BASE_FORECASTS].wide
         horizon = len(top)
@@ -63,7 +63,7 @@ def reconcile_calculate_serialize_error_metrics(hierarchies: list[TemporalHierar
     def _do_reco_calc(h: TemporalHierarchy):
         ForecastReconciliation(h).reconcile('shr')
         errors = ErrorMetrics(h)
-        errors.calc_error_metrics([DAYS, MONTHS])
+        errors.calc_error_metrics([BOTTOM_LEVEL, TOP_LEVEL])
         errors.save(filename_func(h))
 
     with tqdm(total=len(hierarchies), desc="Reconcile", disable=not verbose) as pbar:

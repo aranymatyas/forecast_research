@@ -1,0 +1,26 @@
+{
+    "dataset": {
+        "name": "web-traffic",
+        "start": 0,
+        "end": 500
+    },
+    "model": "AutoETS",
+    "horizon_ratio": 1,
+    "n_jobs": 2,
+    "verbose": false,
+    "levels": {
+        "base_period": 7,
+        "subset": 20,
+        "diff": 1,
+        "max_height": 10,
+        "sequences": 10
+
+        ,
+
+
+        "single_step_repeats": 0
+    },
+    "error_metric": "nrmse",
+    "statistic": "winsorized",
+    "test": "page l"
+}

@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 
 from python.utils import is_long, long_to_wide
 from python.temporal_hierarchy import TemporalHierarchy
-from python.aggregation import Aggregation, DAYS, MONTHS
+from python.aggregation import Aggregation, BOTTOM_LEVEL, TOP_LEVEL
 from python.time_series import BASE_FORECASTS, VALIDATION_SET, RECONCILED_FORECASTS, TRAIN_SET
 from python.error_metrics import ErrorMetrics, MetricsIndex, MetricsFilter
 from python.sampled_hierarchies import SampledHierarchies, MetricAggregateStore, MetricAggregate, StatsMatrix, IndexMatrix
@@ -125,7 +125,7 @@ def plot_summing_matrix(S: pd.DataFrame, height: int=700):
 
     return fig
 
-def plot_forecast(ths: list[TemporalHierarchy], lvls: list[Aggregation] = [DAYS, MONTHS], col: int | str = 1, history_days: int = 1):
+def plot_forecast(ths: list[TemporalHierarchy], lvls: list[Aggregation] = [BOTTOM_LEVEL, TOP_LEVEL], col: int | str = 1, history_days: int = 1):
     ''' Plots the actual, base and reconciled forecasts for the specified levels of the specified time series. GenAI code '''
     if isinstance(col, int):
         col = ths[0][lvls[0]][VALIDATION_SET].wide.columns[col]
@@ -312,6 +312,45 @@ def plot_error_boxes(em: ErrorMetrics, index: MetricsIndex, symlog: bool = False
 
     return fig
 
+def plot_per_series_pvalues(result, alpha: float = 0.05, bins: int = 20):
+    """Histogram of the per-series trend-test p-values from a PerSeriesTrendTestResult.
+
+    The shape of this distribution is the key diagnostic that the winsorized-mean
+    test hides:
+    - a flat (uniform) distribution over [0, 1] means the null holds for every
+      series (no trend either way);
+    - a spike near 0 means a subpopulation of series for which the hierarchy
+      genuinely reduces error (theorem holds);
+    - a spike near 1 means a subpopulation trending the *opposite* way (error
+      grows with hierarchy size).
+
+    The red dashed line marks the significance threshold ``alpha``; the caption
+    reports the fraction of series left of it, the combined p-value and the
+    combination method.
+
+    Args:
+        result: PerSeriesTrendTestResult from per_series_l_test.
+        alpha: significance threshold to draw and to summarise against.
+        bins: number of histogram bins across [0, 1].
+    """
+    p = np.asarray(result.per_series['p_value'], dtype=float)
+    p = p[np.isfinite(p)]
+
+    fig = px.histogram(
+        x=p, nbins=bins, range_x=[0, 1],
+        labels={'x': 'Per-series p-value', 'y': 'Number of series'},
+        title=(
+            f"Per-series {result.trend_type} trend p-values "
+            f"({result.combine_method}-combined p={result.p_value:.3g}, "
+            f"{result.fraction_significant:.1%} of {result.n_valid} series significant)"
+        ),
+    )
+    fig.add_vline(x=alpha, line_dash='dash', line_color='red',
+                  annotation_text=f'α={alpha}', annotation_position='top')
+    fig.update_layout(yaxis_title='Number of series', xaxis_title='Per-series p-value', bargap=0.02)
+    return fig
+
+
 def plot_stats(stats_df: pd.DataFrame, stat: str, labels: tuple = (0,)):
     x = [str([i[j] for j in labels]) for i in stats_df.index]
     fig = px.bar(stats_df, x=x, y=stat, title=f'{stat} statistics')
@@ -410,15 +449,15 @@ def latex_stats_table(stats_df: pd.DataFrame, stat: str,
 
     Produces a table like:
         Granularity & Winsorized Mean NRMSE \\
-        Months & 0.9850 \\
-        Days & 1.2355 \\
+        Top & 0.9850 \\
+        Bottom & 1.2355 \\
 
     Args:
         stats_df: DataFrame returned by em.get_error_stats(index), indexed by INDEX_COLS.
         stat: which stat column to display (e.g. 'winsorized', 'mean', 'median').
         label_index: which index level to use as row labels.
         stat_label: column header for the stat column. If None, auto-generated from stat name.
-        label_map: optional dict to rename index values (e.g. {'Days': 'Days', 'Months': 'Months'}).
+        label_map: optional dict to rename index values (e.g. {'Bottom': 'Bottom', 'Top': 'Top'}).
         caption: LaTeX table caption.
         label: LaTeX table label for \\ref{}.
         precision: decimal places.
@@ -536,7 +575,7 @@ def latex_conformism_table(sh: SampledHierarchies, rows: dict[str, StatsMatrix],
     Args:
         sh: SampledHierarchies object
         rows: dict mapping row labels to their StatsMatrix, e.g.
-              {"Monthly (\\%)": month_stats, "Daily (\\%)": day_stats}
+              {"Top (\\%)": month_stats, "Bottom (\\%)": day_stats}
         value: stat to extract (e.g. 'mean', 'winsorized')
         trend: 'increase' or 'decrease'
         caption: LaTeX table caption

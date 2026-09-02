@@ -17,7 +17,7 @@ OTHER_MODELS = {
 
 ALL_MODELS = STATS_MODELS | OTHER_MODELS
 
-# Minimum training observations at coarsest level (months) to avoid model errors
+# Minimum training observations at coarsest level (top level) to avoid model errors
 MODEL_MIN_TRAIN_OBS = {
     'AutoETS': 11,
     'AutoARIMA': 4,

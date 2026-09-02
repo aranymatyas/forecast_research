@@ -1,10 +1,14 @@
+import os
+from itertools import product
+import random
+
 from datetime import date
 import pandas as pd
 import numpy as np
 
 from python.utils import is_long
 
-BASE_PERIOD = 28
+BASE_PERIOD = int(os.getenv("BASE_PERIOD", 28))
 
 class Aggregation:
     def __init__(self, hierarchy_name: str, period: int, density: float):
@@ -48,6 +52,45 @@ class Aggregation:
     def from_summing_matrix(summing_matrix: np.ndarray, hierarchy_name: str = 'Arbitrary') -> list['Aggregation']:
         return [ArbitraryAggregation(hierarchy_name, row) for row in summing_matrix]
 
+    @staticmethod
+    def complete_summing_matrix(n: int = 0, seed: int = 42) -> list['Aggregation']:
+        '''Return a list of Aggregations from the space of all possible binary vectors of length BASE_PERIOD
+        (excludes the bottom-level daily rows and the top-level total row).
+
+        If n > 0, randomly samples n unique aggregations without enumerating the full space.
+        If n == 0, enumerates all possible aggregations (only feasible for small BASE_PERIOD).
+        '''
+
+        if n > 0:
+            rng = random.Random(seed)
+            seen: set[tuple[int, ...]] = set()
+            aggregations: list['Aggregation'] = []
+
+            while len(aggregations) < n:
+                bits = tuple(rng.randint(0, 1) for _ in range(BASE_PERIOD))
+                if sum(bits) < 2 or sum(bits) == BASE_PERIOD:
+                    continue
+                if bits in seen:
+                    continue
+                seen.add(bits)
+                indices = [i for i, b in enumerate(bits) if b == 1]
+                name = f"Agg_{'_'.join(str(i) for i in indices)}"
+                aggregations.append(ArbitraryAggregation(name, list(bits)))
+
+            return aggregations
+        else:
+            aggregations: list['Aggregation'] = []
+            for bits in product([0, 1], repeat=BASE_PERIOD):
+                if sum(bits) < 2 or sum(bits) == BASE_PERIOD:
+                    continue
+                row = list(bits)
+                indices = [i for i, b in enumerate(bits) if b == 1]
+                name = f"Agg_{'_'.join(str(i) for i in indices)}"
+                aggregations.append(ArbitraryAggregation(name, row))
+            return aggregations
+
+
+
     def __str__(self):
         return self.hierarchy_name
 
@@ -55,8 +98,8 @@ class Aggregation:
         if self is value:
             return True
         if isinstance(value, Aggregation):
-            sm_1 = self.make_summing_matrix([1] * 28).drop(columns=['hierarchy'])
-            sm_2 = value.make_summing_matrix([1] * 28).drop(columns=['hierarchy'])
+            sm_1 = self.make_summing_matrix([1] * BASE_PERIOD).drop(columns=['hierarchy'])
+            sm_2 = value.make_summing_matrix([1] * BASE_PERIOD).drop(columns=['hierarchy'])
             if sm_1.equals(sm_2):
                 return True
 
@@ -117,12 +160,22 @@ class PeriodicAggregation(Aggregation):
             return X[X['day_in_period'] >= self.skip]
 
 # Predefined aggregations for easier access
-DAYS = PeriodicAggregation('Days', 1, 0, True)
-WEEKDAYS = PeriodicAggregation('Weekdays', 5, 2, True)
-WEEKENDS = PeriodicAggregation('Weekends', 2, 5, False)
-WEEKS = PeriodicAggregation('Weeks', 7, 0, True)
-FORTNIGHTS = PeriodicAggregation('Fortnights', 14, 0, True)
-MONTHS = PeriodicAggregation('Months', 28, 0, True)
 
-TWO_DAYS = PeriodicAggregation('2Days', 2, 0, True)
-FOUR_DAYS = PeriodicAggregation('4Days', 4, 0, True)
+BOTTOM_LEVEL = PeriodicAggregation('Bottom', 1, 0, True)
+TOP_LEVEL = PeriodicAggregation('Top', BASE_PERIOD, 0, True)
+
+class MonthsBoundle:
+
+    def __init__(self) -> None:
+        if BASE_PERIOD % 28 != 0:
+            raise ValueError("Months only work if BASE_PERIOD is a multiple of 28")
+
+        self.DAYS = PeriodicAggregation('Days', 1, 0, True)
+        self.WEEKDAYS = PeriodicAggregation('Weekdays', 5, 2, True)
+        self.WEEKENDS = PeriodicAggregation('Weekends', 2, 5, False)
+        self.WEEKS = PeriodicAggregation('Weeks', 7, 0, True)
+        self.FORTNIGHTS = PeriodicAggregation('Fortnights', 14, 0, True)
+        self.MONTHS = PeriodicAggregation('Months', 28, 0, True)
+
+        self.TWO_DAYS = PeriodicAggregation('2Days', 2, 0, True)
+        self.FOUR_DAYS = PeriodicAggregation('4Days', 4, 0, True)

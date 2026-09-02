@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 import numpy as np
 import kagglehub
@@ -6,6 +8,8 @@ from typing import Literal
 import zipfile
 
 type TimeSeriesFormat = Literal["long", "wide"]
+
+BASE_PERIOD = int(os.getenv("BASE_PERIOD", 28))
 
 def fetch_dataset_m4(format: TimeSeriesFormat = "wide") -> pd.DataFrame:
     """ Return train dataset of M4 competition daily time series. Small dataset. Artificial dates. All time series shifted to bottom, lots missing. """
@@ -189,7 +193,7 @@ def get_nearest_monday(after: datetime) -> date:
 
 def align_fill_and_trim_series(df: pd.DataFrame) -> pd.DataFrame:
     ''' Preprocess time series in wide format so that each hole is filled and each series is trimmed,
-        so that the number of days are a multiple of 28, and each of them end on a Sunday
+        so that the number of days are a multiple of BASE_PERIOD, and each of them end on a Sunday
     '''
     conversion =  is_long(df)
     if conversion:
@@ -204,10 +208,10 @@ def align_fill_and_trim_series(df: pd.DataFrame) -> pd.DataFrame:
     df_aligned = df_aligned.ffill()
 
     # Vectorized trimming: null out the first `remainder` valid values per column
-    # so that each series length is divisible by 28
+    # so that each series length is divisible by BASE_PERIOD
     notna_mask = df_aligned.notna()
     cumvalid = notna_mask.cumsum(axis=0)
-    remainders = notna_mask.sum(axis=0) % 28
+    remainders = notna_mask.sum(axis=0) % BASE_PERIOD
     trim_mask = cumvalid.le(remainders, axis=1) & notna_mask
     df_aligned = df_aligned.where(~trim_mask)
 

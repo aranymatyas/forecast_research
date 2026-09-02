@@ -4,36 +4,43 @@ import random
 from typing import Callable, Literal
 
 from python.temporal_hierarchy import TemporalHierarchy
-from python.aggregation import Aggregation, MONTHS, DAYS
+from python.aggregation import Aggregation, TOP_LEVEL, BOTTOM_LEVEL
 from python.error_metrics import MetricsIndex, ErrorMetrics, MetricsFilter
 
 type StatsMatrix = np.ndarray[tuple[int, int], np.dtype[np.object_]]
 type IndexMatrix = np.ndarray[tuple[int, int], np.dtype[np.object_]]
 
 class SampledHierarchies:
-    def __init__(self, available_levels: list[Aggregation], d: int, sample_count: int, start_idx: int  = 0):
+    def __init__(self, available_levels: list[Aggregation], d: int, sample_count: int, start_idx: int  = 0, max_h: int = None):
         self.available_levels = available_levels
         self.d = d
+        self.max_h = max_h or len(self.available_levels)
         self._sample_group_ids = range(start_idx, start_idx + sample_count, 1)
-        self._heights = range(d, len(available_levels), d)
+        self._heights = range(d, self.max_h, d)
 
         self._hierarchies = np.zeros((sample_count, len(self._heights)), dtype=object)
 
         for i, id in enumerate(self._sample_group_ids):
             level_samples = self.cumulative_samples(id)
             for j, level_sample in enumerate(level_samples):
-                th = TemporalHierarchy([MONTHS] + level_sample + [DAYS], f'TH_{id}_{len(level_sample)}')
+                th = TemporalHierarchy([TOP_LEVEL] + level_sample + [BOTTOM_LEVEL], f'TH_{id}_{len(level_sample)}')
                 self._hierarchies[i, j] = th
 
-        self._full_hierarchy = TemporalHierarchy([MONTHS] + available_levels + [DAYS], 'AllPossible')
-        self._base_hierarchy = TemporalHierarchy([MONTHS, DAYS], 'Minimal')
+        self._full_hierarchy = TemporalHierarchy([TOP_LEVEL] + available_levels + [BOTTOM_LEVEL], 'AllPossible')
+        self._base_hierarchy = TemporalHierarchy([TOP_LEVEL, BOTTOM_LEVEL], 'Minimal')
 
 
     def cumulative_samples(self, sample_id: int) -> list[list[Aggregation]]:
         ''' Returns n random combinations of levels '''
         rng = random.Random(sample_id)
-        chosen = rng.sample(self.available_levels, len(self.available_levels))
-        return [chosen[0:n] for n in range(self.d, len(chosen), self.d)]
+        chosen = rng.sample(self.available_levels, self.max_h)
+        return [chosen[0:n] for n in range(self.d, self.max_h, self.d)]
+
+    @staticmethod
+    def pre_draw_levels(available_levels: list[Aggregation], n: int, seed: int = 42) -> list[Aggregation]:
+        n = len(available_levels) if n == 0 else n
+        return random.Random(seed).sample(available_levels, n)
+
 
     @property
     def group_ids(self) -> list[int]:
@@ -46,6 +53,10 @@ class SampledHierarchies:
     @property
     def hierarchies(self) -> list[TemporalHierarchy]:
         return list(self._hierarchies.flatten())
+
+    @property
+    def last_hierarchies(self) -> list[TemporalHierarchy]:
+        return list(self._hierarchies[:, -1])
 
     @property
     def full_hierarchy(self) -> TemporalHierarchy:
@@ -111,7 +122,11 @@ class SampledHierarchies:
         return agg_store
 
     def error_matrix(self, em: ErrorMetrics, index_matrix: IndexMatrix, df_filter: MetricsFilter=None) -> np.ndarray:
-        return np.vectorize(lambda i: em.get_error_stats(i, df_filter), otypes=[object])(index_matrix)
+        results: dict[MetricsIndex, pd.DataFrame] = {}
+        for idx in index_matrix.flatten():
+            if idx not in results:
+                results[idx] =  em.get_error_stats(idx, df_filter)
+        return np.vectorize(lambda i: results[i], otypes=[object])(index_matrix)
 
     def error_row(self, em: ErrorMetrics, indeces: list[MetricsIndex], df_filter: MetricsFilter=None):
         return np.vectorize(lambda i: em.get_error_stats(i, df_filter), otypes=[object])(indeces)
@@ -126,6 +141,26 @@ class SampledHierarchies:
         changes = np.where(np.diff(values, axis=1) > 0, desired_change, 1 - desired_change)
 
         return np.mean(changes, axis=1)
+
+class SingleStepHierarchies(SampledHierarchies):
+
+    def __init__(self, available_levels: list[Aggregation]):
+        self.available_levels = available_levels
+        self._sample_group_ids = range(0, len(available_levels))
+        self._heights = [0, 1]
+        self._hierarchies = np.zeros((len(available_levels), 1), dtype=object)
+
+        for id in self._sample_group_ids:
+            th = TemporalHierarchy([TOP_LEVEL] + [available_levels[id]] + [BOTTOM_LEVEL], f'TH_{id}')
+            self._hierarchies[id, 0] = th
+
+        self._full_hierarchy = TemporalHierarchy([TOP_LEVEL] + available_levels + [BOTTOM_LEVEL], 'AllPossible')
+        self._base_hierarchy = TemporalHierarchy([TOP_LEVEL, BOTTOM_LEVEL], 'Minimal')
+
+    def index_matrix(self, **index_kwargs):
+        right = np.vectorize(lambda h: MetricsIndex(**index_kwargs | {'hierarchy': h}))(self._hierarchies)
+        left = np.array([MetricsIndex(**index_kwargs | {'hierarchy': self.base_hierarchy})] * right.shape[0]).reshape(right.shape)
+        return np.concat([left, right], axis=1)
 
 class MetricAggregate:
     def __init__(self, stat: str, agg: str, values: np.ndarray, group_by: str):

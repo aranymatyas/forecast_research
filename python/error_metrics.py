@@ -5,7 +5,7 @@ import numpy as np
 
 from python.temporal_hierarchy import TemporalHierarchy
 from python.time_series import BASE_FORECASTS, RECONCILED_FORECASTS, VALIDATION_SET, TRAIN_SET, TimeSeriesType
-from python.aggregation import DAYS, MONTHS, Aggregation
+from python.aggregation import BOTTOM_LEVEL, TOP_LEVEL, Aggregation
 
 type MetricsFilter = Callable[[pd.DataFrame], pd.DataFrame] | None
 type MetricType = Literal['mase', 'nrmse', 'wape', '1-r2']
@@ -80,6 +80,12 @@ class MetricsIndex:
             for h, f, g, e, m in product(hierarchies, forecast_types, granularities, error_metrics, methods)
         ]
 
+    def __hash__(self) -> int:
+        return hash(str(self))
+
+    def __eq__(self, value: object) -> bool:
+        return str(self) == str(value)
+
 NO_INDEX = MetricsIndex()
 
 
@@ -90,7 +96,7 @@ class ErrorMetrics:
         self._ts_columns: list[str] = None
         self._cache = True
 
-    def calc_error_metrics(self, benchmark_aggregations: list[Aggregation] = [DAYS, MONTHS]):
+    def calc_error_metrics(self, benchmark_aggregations: list[Aggregation] = [BOTTOM_LEVEL, TOP_LEVEL]):
         ''' Returns table where columns correspond to individual time series and rows are the different error metrics '''
         if not benchmark_aggregations:
             benchmark_aggregations = self.temporal_hierarchy.aggregations
@@ -135,7 +141,7 @@ class ErrorMetrics:
         return self
 
     def calc_ts_columns(self):
-        self._ts_columns = self.temporal_hierarchy[DAYS][BASE_FORECASTS].wide.columns.tolist()
+        self._ts_columns = self.temporal_hierarchy[BOTTOM_LEVEL][BASE_FORECASTS].wide.columns.tolist()
         return self
 
     @property
@@ -187,7 +193,7 @@ class LoadedErrorMetrics(ErrorMetrics):
         self._metrics = pd.read_csv(filename, index_col=INDEX_COLS)
         self._ts_columns = self.metrics.columns.tolist()
 
-    def calc_error_metrics(self, benchmark_aggregations: list[Aggregation] = [DAYS, MONTHS]):
+    def calc_error_metrics(self, benchmark_aggregations: list[Aggregation] = [BOTTOM_LEVEL, TOP_LEVEL]):
         print('Cannot recalculate metrics which were loaded!')
         return self
 
@@ -197,7 +203,7 @@ class ClonedErrorMetrics(ErrorMetrics):
         self._metrics = error_metrics.metrics.copy()
         self._ts_columns = error_metrics.ts_columns.copy()
 
-    def calc_error_metrics(self, benchmark_aggregations: list[Aggregation] = [DAYS, MONTHS]):
+    def calc_error_metrics(self, benchmark_aggregations: list[Aggregation] = [BOTTOM_LEVEL, TOP_LEVEL]):
         print('Cannot recalculate metrics which were cloned!')
         return self
 
@@ -221,7 +227,7 @@ class MergedErrorMetrics(ViewErrorMetrics):
         self.error_metrics_list = error_metrics_list
         self.axis = 0 if direction == 'vertical' else 1
 
-    def calc_error_metrics(self, benchmark_aggregations: list[Aggregation] = [DAYS, MONTHS]):
+    def calc_error_metrics(self, benchmark_aggregations: list[Aggregation] = [BOTTOM_LEVEL, TOP_LEVEL]):
         if benchmark_aggregations is not None:
             # Called manually
             self._metrics = pd.concat([em.calc_error_metrics(benchmark_aggregations).metrics for em in self.error_metrics_list], axis=self.axis)
@@ -317,7 +323,7 @@ class CustomMetrics(ErrorMetrics):
         self._metrics = metrics
         self._ts_columns = cols
 
-    def calc_error_metrics(self, benchmark_aggregations: list[Aggregation] = [DAYS, MONTHS]):
+    def calc_error_metrics(self, benchmark_aggregations: list[Aggregation] = [BOTTOM_LEVEL, TOP_LEVEL]):
         print('Cannont calculate metrics for a CustomMetric')
         return self
 

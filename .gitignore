@@ -19,3 +19,5 @@ web_traffic.qmd
 doc/paper/.build
 doc/paper/.old
 doc/paper/**.pdf
+
+misc/

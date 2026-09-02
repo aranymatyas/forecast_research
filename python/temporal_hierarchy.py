@@ -5,7 +5,7 @@ from typing import overload
 from tqdm import tqdm
 
 from python.utils import long_to_wide, wide_to_long, is_long, get_nearest_monday
-from python.aggregation import Aggregation, DAYS, BASE_PERIOD
+from python.aggregation import Aggregation, BASE_PERIOD, BOTTOM_LEVEL
 from python.time_series import TimeSeries, TimeSeriesType
 from python.time_series import FULL_DATA, BASE_FORECASTS, TRAIN_SET, VALIDATION_SET, RESIDUALS, RECONCILED_FORECASTS
 from python.base_forecasting import make_forecasts
@@ -76,7 +76,7 @@ class ForecastLevel:
 class TemporalHierarchy:
     def __init__(self, levels: list[Aggregation], name: str = 'th'):
         ''' Levels should be listed top down '''
-        if DAYS not in levels:
+        if BOTTOM_LEVEL not in levels:
             print("Days are not included in hierarchy. Are you sure?")
         self.forecast_levels = [ForecastLevel(level) for level in levels]
         self.name = name
@@ -155,18 +155,19 @@ class TemporalHierarchy:
 
     @overload
     def __getitem__(self, key: Aggregation) -> ForecastLevel: ...
-
     @overload
     def __getitem__(self, key: TimeSeriesType) -> np.ndarray: ...
-
-    def __getitem__(self, key: Aggregation | TimeSeriesType):
-        if isinstance(key, Aggregation):
-            for lvl in self.forecast_levels:
-                if lvl.aggregation == key:
-                    return lvl
-            raise ValueError(f"Aggregation {key.hierarchy_name} is not part of hierarchy")
+    @overload
+    def __getitem__(self, key: str) -> np.ndarray: ...
+    def __getitem__(self, key: Aggregation | str | TimeSeriesType):
         if isinstance(key, TimeSeriesType):
             return self.reorder(key)
+        if isinstance(key, Aggregation) or isinstance(key, str):
+            for lvl in self.forecast_levels:
+                if lvl.aggregation == key or str(lvl.aggregation) == key:
+                    return lvl
+            raise ValueError(f"Aggregation {key} is not part of hierarchy")
+
 
     def clone(self, clone_suffix = None, clone_name = None) -> 'TemporalHierarchy':
         ''' Makes a copy of the temporal hierarchy. The copy's hierarchy levels will have the same state and data. '''
@@ -193,53 +194,31 @@ class TemporalHierarchy:
         return self.name
 
 # Predefined Hierarchies
-from python.aggregation import DAYS, WEEKDAYS, WEEKENDS, WEEKS, FORTNIGHTS, MONTHS
-from python.aggregation import TWO_DAYS, FOUR_DAYS, ArbitraryAggregation
 
+class KnownHierarchyBundle:
+    def __init__(self) -> None:
+        from python.aggregation import MonthsBoundle, ArbitraryAggregation
 
-class MinimalTemporalHierarchy(TemporalHierarchy):
-    def __init__(self):
-        ''' Minimal temporal hierarchy just with months and days '''
-        super().__init__(
-            levels=[MONTHS, DAYS],
-            name='Minimal'
-        )
+        aggs = MonthsBoundle()
 
-class SemanticTemporalHierarchy(TemporalHierarchy):
-    def __init__(self):
-        ''' Temporal hierarchy rough with levels that make semantic sense '''
-        super().__init__(
-            levels=[MONTHS, FORTNIGHTS, WEEKS, WEEKENDS, WEEKDAYS, DAYS],
-            name='Semantic'
-        )
-
-class BinaryTemporalHierarchy(TemporalHierarchy):
-    def __init__(self):
-        ''' Temporal hierarchy roughly binary '''
-        super().__init__(
-            levels=[MONTHS,
-                    ArbitraryAggregation('16Days', [1] * 16 + [0] * 12),
-                    ArbitraryAggregation('12Days', [0] * 16 + [1] * 12),
-                    ArbitraryAggregation('8Days', [1] * 8 + [0] * 20),
-                    ArbitraryAggregation('8Days', [0] * 8 + [1] * 8 + [0] * 12),
-                    ArbitraryAggregation('8Days', [0] * 16 + [1] * 8 + [0] * 4),
-                    FOUR_DAYS,
-                    TWO_DAYS,
-                    DAYS],
-            name='Binary'
-        )
-
-class FullTemporalHierarchy(TemporalHierarchy):
-    def __init__(self):
-        ''' Full hierarchy with all possible levels '''
-        super().__init__(
-            levels=[MONTHS, FORTNIGHTS, WEEKS, WEEKENDS, WEEKDAYS,
-                    ArbitraryAggregation('16Days', [1] * 16 + [0] * 12),
-                    ArbitraryAggregation('12Days', [0] * 16 + [1] * 12),
-                    ArbitraryAggregation('8Days', [1] * 8 + [0] * 20),
-                    ArbitraryAggregation('8Days', [0] * 8 + [1] * 8 + [0] * 12),
-                    ArbitraryAggregation('8Days', [0] * 16 + [1] * 8 + [0] * 4),
-                    FOUR_DAYS, TWO_DAYS,
-                    DAYS],
-            name='Full'
-        )
+        self.minimal = TemporalHierarchy([aggs.MONTHS, aggs.DAYS], 'Minimal')
+        self.semantic = TemporalHierarchy([aggs.MONTHS, aggs.FORTNIGHTS, aggs.WEEKS, aggs.WEEKENDS, aggs.WEEKDAYS, aggs.DAYS], 'Semantic')
+        self.binary = TemporalHierarchy([aggs.MONTHS,
+                                         ArbitraryAggregation('16Days', [1] * 16 + [0] * 12),
+                                         ArbitraryAggregation('12Days', [0] * 16 + [1] * 12),
+                                         ArbitraryAggregation('8Days', [1] * 8 + [0] * 20),
+                                         ArbitraryAggregation('8Days', [0] * 8 + [1] * 8 + [0] * 12),
+                                         ArbitraryAggregation('8Days', [0] * 16 + [1] * 8 + [0] * 4),
+                                         aggs.FOUR_DAYS,
+                                         aggs.TWO_DAYS,
+                                         aggs.DAYS],
+                                         'Binary')
+        self.full = TemporalHierarchy([aggs.MONTHS, aggs.FORTNIGHTS, aggs.WEEKS, aggs.WEEKENDS, aggs.WEEKDAYS,
+                                        ArbitraryAggregation('16Days', [1] * 16 + [0] * 12),
+                                        ArbitraryAggregation('12Days', [0] * 16 + [1] * 12),
+                                        ArbitraryAggregation('8Days', [1] * 8 + [0] * 20),
+                                        ArbitraryAggregation('8Days', [0] * 8 + [1] * 8 + [0] * 12),
+                                        ArbitraryAggregation('8Days', [0] * 16 + [1] * 8 + [0] * 4),
+                                        aggs.FOUR_DAYS, aggs.TWO_DAYS,
+                                        aggs.DAYS],
+                                        'Full')
