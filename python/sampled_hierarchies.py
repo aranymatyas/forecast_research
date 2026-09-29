@@ -4,7 +4,7 @@ import random
 from typing import Callable, Literal
 
 from python.temporal_hierarchy import TemporalHierarchy
-from python.aggregation import Aggregation, TOP_LEVEL, BOTTOM_LEVEL
+from python.aggregation import Aggregation, TOP_LEVEL, BOTTOM_LEVEL, ArbitraryAggregation
 from python.error_metrics import MetricsIndex, ErrorMetrics, MetricsFilter
 
 type StatsMatrix = np.ndarray[tuple[int, int], np.dtype[np.object_]]
@@ -20,15 +20,23 @@ class SampledHierarchies:
 
         self._hierarchies = np.zeros((sample_count, len(self._heights)), dtype=object)
 
+        self._assemble_hierarchies()
+
+    def _assemble_hierarchies(self):
+        filtered_levels: set[Aggregation] = set()
         for i, id in enumerate(self._sample_group_ids):
             level_samples = self.cumulative_samples(id)
             for j, level_sample in enumerate(level_samples):
                 th = TemporalHierarchy([TOP_LEVEL] + level_sample + [BOTTOM_LEVEL], f'TH_{id}_{len(level_sample)}')
+                filtered_levels = filtered_levels.union(level_sample)
                 self._hierarchies[i, j] = th
 
-        self._full_hierarchy = TemporalHierarchy([TOP_LEVEL] + available_levels + [BOTTOM_LEVEL], 'AllPossible')
-        self._base_hierarchy = TemporalHierarchy([TOP_LEVEL, BOTTOM_LEVEL], 'Minimal')
+        self.available_levels = list(filtered_levels)
+        self._assemble_full_base_hierarchies()
 
+    def _assemble_full_base_hierarchies(self):
+        self._full_hierarchy = TemporalHierarchy([TOP_LEVEL] + self.available_levels + [BOTTOM_LEVEL], 'AllPossible')
+        self._base_hierarchy = TemporalHierarchy([TOP_LEVEL, BOTTOM_LEVEL], 'Minimal')
 
     def cumulative_samples(self, sample_id: int) -> list[list[Aggregation]]:
         ''' Returns n random combinations of levels '''
@@ -144,23 +152,52 @@ class SampledHierarchies:
 
 class SingleStepHierarchies(SampledHierarchies):
 
-    def __init__(self, available_levels: list[Aggregation]):
+    def __init__(self, available_levels: list[Aggregation], height: int = 1):
         self.available_levels = available_levels
         self._sample_group_ids = range(0, len(available_levels))
-        self._heights = [0, 1]
+        self._heights = [0, height]
         self._hierarchies = np.zeros((len(available_levels), 1), dtype=object)
 
+        self._assemble_hierarchies()
+
+
+    def _assemble_hierarchies(self):
         for id in self._sample_group_ids:
-            th = TemporalHierarchy([TOP_LEVEL] + [available_levels[id]] + [BOTTOM_LEVEL], f'TH_{id}')
+            th = TemporalHierarchy([TOP_LEVEL] + [self.available_levels[id]] + [BOTTOM_LEVEL], f'TH_{id}')
             self._hierarchies[id, 0] = th
 
-        self._full_hierarchy = TemporalHierarchy([TOP_LEVEL] + available_levels + [BOTTOM_LEVEL], 'AllPossible')
-        self._base_hierarchy = TemporalHierarchy([TOP_LEVEL, BOTTOM_LEVEL], 'Minimal')
+        self._assemble_full_base_hierarchies()
 
     def index_matrix(self, **index_kwargs):
         right = np.vectorize(lambda h: MetricsIndex(**index_kwargs | {'hierarchy': h}))(self._hierarchies)
         left = np.array([MetricsIndex(**index_kwargs | {'hierarchy': self.base_hierarchy})] * right.shape[0]).reshape(right.shape)
         return np.concat([left, right], axis=1)
+
+class PartitionStepHierarchies(SingleStepHierarchies):
+
+    def __init__(self, available_levels: list[Aggregation], partition: int, base_period: int):
+        if partition != 2:
+            raise NotImplementedError("Partitioning into not two subsets is not yet implemented")
+        filtered_levels = []
+        self._complementer_levels = {}
+        for level in available_levels:
+            sum_row = level.make_summing_matrix([0] * base_period).drop(columns=['hierarchy']).values.flatten()
+            if sum_row.sum() <= base_period // 2:
+                filtered_levels.append(level)
+                comp = ArbitraryAggregation(str(level) + "_comp", np.abs(sum_row - 1))
+                self._complementer_levels[str(level)] = comp
+
+        super().__init__(filtered_levels, 2)
+
+    def _assemble_hierarchies(self):
+        for id in self._sample_group_ids:
+            level = self.available_levels[id]
+            th = TemporalHierarchy([TOP_LEVEL] + [level, self._complementer_levels[str(level)]] + [BOTTOM_LEVEL], f'TH_{id}')
+            self._hierarchies[id, 0] = th
+
+        self.available_levels.extend(self._complementer_levels.values())
+        self._assemble_full_base_hierarchies()
+
 
 class MetricAggregate:
     def __init__(self, stat: str, agg: str, values: np.ndarray, group_by: str):

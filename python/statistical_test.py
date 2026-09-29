@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Callable, Literal
+from typing import Callable, Literal, Iterable
 from python.sampled_hierarchies import SampledHierarchies, StatsMatrix, SingleStepHierarchies
 from python.error_metrics import ErrorMetrics, MetricsIndex
 from python.time_series import RECONCILED_FORECASTS
@@ -14,10 +14,17 @@ class TrendType(StrEnum):
     DECREASING = auto()
     INCREASING = auto()
     STAGNANT = auto()
+    NOISE = auto()
+    """STAGNANT tests whether the middle of the distribution is significantly
+    different from zero using a two-sided test. Failure to reject the null
+    hypothesis (middle = zero) is success, indicating stagnancy."""
 
 class CombineMethod(StrEnum):
     FISHER = auto()
     STOUFFER = auto()
+    PEARSON = auto()
+    TIPPETT = auto()
+    MUDHOLKAR_GEORGE = auto()
 
 TestMethod = Literal['page l', 'slope t', 'wilcoxon', 'sign']
 
@@ -35,8 +42,14 @@ class AggregateTrendTestResult:
         return f"{self.method} testing for {self.trend_type} trend: statistic={self.statistic:.4f}, p={self.p_value:.6f} ({sig})"
 
 @dataclass
-class PerSeriesTrendTestResult:
-    """Result of running a per-series trend test and combining the p-values."""
+class PerAxisTrendTestResult:
+    """Result of running a per-unit trend test and combining the p-values.
+
+    A "unit" is either a single time series (see
+    :class:`PerSeriesTrendTestResult`) or a single hierarchy sequence (see
+    :class:`PerHierarchyTrendTestResult`), depending on which axis the tests
+    were run over.
+    """
 
     statistic: float
     p_value: float
@@ -47,17 +60,28 @@ class PerSeriesTrendTestResult:
     n_series: int
     n_valid: int
     fraction_significant: float
-    per_series: pd.DataFrame = field(repr=False)
-    """Per-series results indexed by time-series name, with ``p_value`` and
-    ``statistic`` columns. Series that could not be tested hold NaN."""
+    per_unit: pd.DataFrame = field(repr=False)
+    """Per-unit results indexed by the unit label (time-series name or hierarchy
+    sequence id), with ``p_value`` and ``statistic`` columns. Units that could
+    not be tested hold NaN."""
 
     def __repr__(self) -> str:
         sig = "SIGNIFICANT" if self.significant else "not significant"
         return (
             f"{self.method} ({self.combine_method}-combined) testing for {self.trend_type} trend: "
             f"statistic={self.statistic:.4f}, p={self.p_value:.6f} ({sig}); "
-            f"{self.fraction_significant:.1%} of {self.n_valid}/{self.n_series} series individually significant"
+            f"{self.fraction_significant:.1%} of {self.n_valid}/{self.n_series} units individually significant"
         )
+
+
+@dataclass
+class PerSeriesTrendTestResult(PerAxisTrendTestResult):
+    """Per-axis trend test result where each unit is a single time series."""
+
+
+@dataclass
+class PerHierarchyTrendTestResult(PerAxisTrendTestResult):
+    """Per-axis trend test result where each unit is a single hierarchy sequence."""
 
 class TestResultsLatex:
     def __init__(self, *test_results: AggregateTrendTestResult) -> None:
@@ -163,7 +187,7 @@ def slope_ttest(
     positions = np.arange(data.shape[1])
     slopes = np.array([stats.linregress(positions, row).slope for row in data])
 
-    if trend_type == TrendType.STAGNANT:
+    if trend_type == TrendType.NOISE:
         if epsilon is None:
             epsilon = 0.1 * float(np.std(slopes, ddof=1))
         if epsilon <= 0:
@@ -192,6 +216,19 @@ def slope_ttest(
             trend_type=trend_type,
         )
 
+    if trend_type == TrendType.STAGNANT:
+        # Two-sided test: H0 is mean slope = 0 (no trend).
+        # Failure to reject (large p-value) indicates stagnancy.
+        # Success (significant) means we DO have a trend (not stagnant).
+        t_stat, p_value = stats.ttest_1samp(slopes, 0, alternative="two-sided")
+        return AggregateTrendTestResult(
+            statistic=t_stat,
+            p_value=p_value,
+            significant=p_value < alpha,
+            method="t-test on slopes (two-sided for stagnancy)",
+            trend_type=trend_type,
+        )
+
     t_stat, p_two_sided = stats.ttest_1samp(slopes, 0)
     # One-sided test: H1 is mean slope < 0 (decreasing)
     condition_met = t_stat < 0 if trend_type == TrendType.DECREASING else t_stat > 0
@@ -211,7 +248,9 @@ def page_trend_test(data: np.ndarray, alpha: float = 0.05, trend_type: TrendType
     Non-parametric test for a monotone trend across columns.
 
     Uses Page's L test, which tests the alternative hypothesis that
-    the observations follow a specific monotonic ordering
+    the observations follow a specific monotonic ordering. For STAGNANT,
+    returns a result indicating stagnancy cannot be tested with Page's L
+    (it requires monotonic ordering, not the absence of trend).
 
     Parameters
     ----------
@@ -220,12 +259,25 @@ def page_trend_test(data: np.ndarray, alpha: float = 0.05, trend_type: TrendType
         independent sequence; columns are ordered positions.
     alpha : float
         Significance level (default 0.05).
+    trend_type : TrendType
+        DECREASING, INCREASING, STAGNANT, or NOISE.
 
     Returns
     -------
     TrendTestResult
         Contains L statistic, p-value, and significance flag.
     """
+    if trend_type == TrendType.STAGNANT:
+        # Page's L cannot test for stagnancy (absence of monotonic trend);
+        # it tests for monotonic ordering. Return a result indicating this.
+        return AggregateTrendTestResult(
+            statistic=float("nan"),
+            p_value=1.0,
+            significant=False,
+            method="Page's L trend test (not applicable for stagnancy)",
+            trend_type=trend_type,
+        )
+
     k = data.shape[1]
     predicted_ranks = list(range(k, 0, -1) if trend_type == TrendType.DECREASING else range(1, k + 1, 1))
 
@@ -258,16 +310,34 @@ def _paired_differences(data: np.ndarray) -> np.ndarray:
     return d[np.isfinite(d)]
 
 
-def _stagnant_margin(diffs: np.ndarray, epsilon: float | None) -> float:
-    """Resolve the equivalence margin for a STAGNANT (TOST) test."""
+def _resolve_margin(diffs: np.ndarray, epsilon: float | None, *, required: bool) -> float:
+    """Resolve the tolerance margin used by the epsilon-aware trend tests.
+
+    The margin is expressed in **absolute error-metric units** (e.g. NRMSE). The
+    caller (notebook) is expected to derive a meaningful value -- for instance a
+    fraction of the reconciled-minimal error -- and pass it in explicitly.
+
+    - When ``epsilon`` is ``None`` it falls back to ``0.1 * std(d)``. This keeps
+      backward compatibility but is deliberately narrow; prefer an explicit,
+      pre-declared margin (a smallest-effect-size-of-interest).
+    - ``required=True`` (STAGNANT/TOST) forbids a non-positive margin, since an
+      equivalence band of zero width is untestable.
+    - ``required=False`` (INCREASING/DECREASING) allows ``epsilon == 0`` to mean
+      "no tolerance", recovering the classic test against exactly zero.
+    """
     if epsilon is None:
-        epsilon = 0.1 * float(np.std(diffs, ddof=1))
-    if epsilon <= 0:
+        if required:
+            epsilon = 0.1 * float(np.std(diffs, ddof=1))
+        else:
+            epsilon = 0.0
+    if required and (np.array(epsilon) <= 0).any():
         raise ValueError(
             "epsilon must be positive for a STAGNANT (equivalence) test; the "
             "differences have (near) zero variance so no scale-relative default "
             "could be derived. Pass an explicit epsilon."
         )
+    if (np.array(epsilon) < 0).any():
+        raise ValueError("epsilon must be non-negative.")
     return epsilon
 
 
@@ -285,12 +355,18 @@ def wilcoxon_test(
     assumes the differences are symmetric about their median but does not
     assume normality.
 
-    - DECREASING: H1 is ``median(d) > 0`` (adding a level reduces error).
-    - INCREASING: H1 is ``median(d) < 0``.
+    - DECREASING: H1 is ``median(d) > +epsilon`` (adding a level reduces error
+      by more than the tolerance ``epsilon``).
+    - INCREASING: H1 is ``median(d) < -epsilon``.
     - STAGNANT: TOST equivalence -- two one-sided signed-rank tests against the
       band ``[-epsilon, +epsilon]``, concluding the location of ``d`` is
-      practically zero only if both reject. ``epsilon`` (absolute error-metric
-      units) defaults to ``0.1 * std(d)`` when not given.
+      practically zero only if both reject.
+
+    ``epsilon`` is a tolerance margin in absolute error-metric units, applied in
+    every trend type. It defaults to ``0.1 * std(d)`` when not given; pass an
+    explicit, pre-declared value (a smallest-effect-size-of-interest) for a
+    principled materiality threshold. ``epsilon = 0`` recovers the classic test
+    against exactly zero for DECREASING/INCREASING.
 
     Parameters
     ----------
@@ -309,8 +385,8 @@ def wilcoxon_test(
     """
     d = _paired_differences(data)
 
-    if trend_type == TrendType.STAGNANT:
-        eps = _stagnant_margin(d, epsilon)
+    if trend_type == TrendType.NOISE:
+        eps = _resolve_margin(d, epsilon, required=True)
         # lower: H1 median > -eps   upper: H1 median < +eps
         w_lower, p_lower = stats.wilcoxon(d + eps, alternative="greater")
         w_upper, p_upper = stats.wilcoxon(d - eps, alternative="less")
@@ -323,8 +399,42 @@ def wilcoxon_test(
             trend_type=trend_type,
         )
 
-    alternative = "greater" if trend_type == TrendType.DECREASING else "less"
-    result = stats.wilcoxon(d, alternative=alternative)
+    if trend_type == TrendType.STAGNANT:
+        # Two-sided test: H0 is median(d) = 0 (no difference/trend).
+        # Failure to reject (large p-value) indicates stagnancy.
+        if not np.any(d != 0):
+            return AggregateTrendTestResult(
+                statistic=float("nan"), p_value=1.0, significant=False,
+                method="Wilcoxon signed-rank test (two-sided for stagnancy)",
+                trend_type=trend_type,
+            )
+        result = stats.wilcoxon(d, alternative="two-sided")
+        return AggregateTrendTestResult(
+            statistic=float(result.statistic),
+            p_value=float(result.pvalue),
+            significant=result.pvalue < alpha,
+            method="Wilcoxon signed-rank test (two-sided for stagnancy)",
+            trend_type=trend_type,
+        )
+
+    # DECREASING/INCREASING with a tolerance margin: only count a change that
+    # exceeds +/- eps as a real trend. eps=0 recovers the classic test vs zero.
+    eps = _resolve_margin(d, epsilon, required=False)
+    if trend_type == TrendType.DECREASING:
+        # H1: median(d) > +eps  (adding a level reduces error by more than eps)
+        shifted, alternative = d - eps, "greater"
+    else:
+        # INCREASING -> H1: median(d) < -eps (error grows by more than eps)
+        shifted, alternative = d + eps, "less"
+
+    # Wilcoxon is undefined when every shifted difference is zero (no signed
+    # ranks). Treat that as no evidence of a trend.
+    if not np.any(shifted != 0):
+        return AggregateTrendTestResult(
+            statistic=float("nan"), p_value=1.0, significant=False,
+            method="Wilcoxon signed-rank test", trend_type=trend_type,
+        )
+    result = stats.wilcoxon(shifted, alternative=alternative)
 
     return AggregateTrendTestResult(
         statistic=float(result.statistic),
@@ -349,12 +459,20 @@ def sign_test(
     assumption beyond independence -- robust to skew, at the cost of power
     (magnitude information is discarded).
 
-    - DECREASING: H1 is ``P(d > 0) > 0.5`` (adding a level tends to reduce error).
-    - INCREASING: H1 is ``P(d > 0) < 0.5``.
+    - DECREASING: H1 is ``P(d > +epsilon) > P(d < -epsilon)`` (material
+      reductions outnumber material increases).
+    - INCREASING: H1 is the reverse.
     - STAGNANT: TOST equivalence -- two one-sided sign tests against the band
       ``[-epsilon, +epsilon]``. The lower test asks whether few differences fall
       below ``-epsilon``; the upper whether few exceed ``+epsilon``. Equivalence
-      is concluded only if both reject. ``epsilon`` defaults to ``0.1 * std(d)``.
+      is concluded only if both reject.
+
+    ``epsilon`` is a tolerance margin in absolute error-metric units, applied in
+    every trend type: for DECREASING/INCREASING only differences whose magnitude
+    exceeds ``epsilon`` are counted, so sub-margin noise is discarded. It
+    defaults to ``0.1 * std(d)``; pass an explicit pre-declared value for a
+    principled materiality threshold. ``epsilon = 0`` recovers the classic sign
+    test against exactly zero.
 
     Parameters
     ----------
@@ -375,8 +493,8 @@ def sign_test(
     """
     d = _paired_differences(data)
 
-    if trend_type == TrendType.STAGNANT:
-        eps = _stagnant_margin(d, epsilon)
+    if trend_type == TrendType.NOISE:
+        eps = _resolve_margin(d, epsilon, required=True)
         # H1 (equivalence): the location of d sits inside (-eps, +eps).
         # lower one-sided: few differences below -eps  -> P(d < -eps) < 0.5
         n_below = int(np.sum(d < -eps))
@@ -400,11 +518,43 @@ def sign_test(
             trend_type=trend_type,
         )
 
-    n_pos = int(np.sum(d > 0))
-    n_nonzero = int(np.sum(d != 0))
-    # DECREASING -> expect a majority of positive differences.
+    if trend_type == TrendType.STAGNANT:
+        # Two-sided sign test: H0 is that positive and negative differences are equally likely.
+        # Failure to reject (large p-value) indicates stagnancy (no consistent direction).
+        n_pos = int(np.sum(d > 0))   # differences in positive direction
+        n_neg = int(np.sum(d < 0))   # differences in negative direction
+        n_effective = n_pos + n_neg
+        if n_effective == 0:
+            return AggregateTrendTestResult(
+                statistic=0.0, p_value=1.0, significant=False,
+                method="Sign test (two-sided for stagnancy)", trend_type=trend_type,
+            )
+        # Two-sided binomial test: H0 is that pos and neg are equally likely (p=0.5)
+        result = stats.binomtest(n_pos, n_effective, 0.5, alternative="two-sided")
+        return AggregateTrendTestResult(
+            statistic=float(n_pos),
+            p_value=float(result.pvalue),
+            significant=result.pvalue < alpha,
+            method="Sign test (two-sided for stagnancy)",
+            trend_type=trend_type,
+        )
+
+    # DECREASING/INCREASING with a tolerance margin: classify each difference
+    # against +/- eps and count only the ones that clear the band. eps=0
+    # recovers the classic sign test against exactly zero.
+    eps = _resolve_margin(d, epsilon, required=False)
+    n_pos = int(np.sum(d > eps))   # materially decreased error (helped)
+    n_neg = int(np.sum(d < -eps))  # materially increased error (hurt)
+    n_effective = n_pos + n_neg
+    # No difference clears the +/- eps band -> no material evidence either way.
+    if n_effective == 0:
+        return AggregateTrendTestResult(
+            statistic=0.0, p_value=1.0, significant=False,
+            method="Sign test", trend_type=trend_type,
+        )
+    # DECREASING -> majority of material changes are reductions (d > +eps).
     alternative = "greater" if trend_type == TrendType.DECREASING else "less"
-    result = stats.binomtest(n_pos, n_nonzero, 0.5, alternative=alternative)
+    result = stats.binomtest(n_pos, n_effective, 0.5, alternative=alternative)
 
     return AggregateTrendTestResult(
         statistic=float(n_pos),
@@ -415,9 +565,19 @@ def sign_test(
     )
 
 
+TEST_METHOD_NAMES: dict[Callable, TestMethod] = {
+    page_trend_test: 'page l',
+    slope_ttest: 'slope t',
+    wilcoxon_test: 'wilcoxon',
+    sign_test: 'sign',
+}
+"""Maps a test-function object to its canonical :data:`TestMethod` name, so the
+result objects can report which test produced them instead of a placeholder."""
+
+
 def _error_tensor(sampled_hierarchies: SampledHierarchies, em: ErrorMetrics,
                   forecast_type: str, granularity: str, error_metric: str,
-                  method: str) -> tuple[np.ndarray, list[str]]:
+                  method: str) -> tuple[np.ndarray, Iterable[str], list[int]]:
     """Build a ``(n_sequences, n_heights, n_series)`` tensor of raw per-series errors.
 
     For every sampled-hierarchy cell ``(group, height)`` we select the fully
@@ -427,7 +587,8 @@ def _error_tensor(sampled_hierarchies: SampledHierarchies, em: ErrorMetrics,
     height axis are preserved so each series can later be tested on its own
     ``(n_sequences, n_heights)`` matrix.
 
-    Returns the tensor and the list of series column names.
+    Returns the tensor, the list of series column names and list of sequence IDs
+    (corresponding to group indices).
     """
     index_matrix = sampled_hierarchies.index_matrix(
         forecast_type=forecast_type,
@@ -438,6 +599,7 @@ def _error_tensor(sampled_hierarchies: SampledHierarchies, em: ErrorMetrics,
     n_groups, n_heights = index_matrix.shape
     ts_columns = em.ts_columns
     n_series = len(ts_columns)
+    sequence_ids = list(range(n_groups))
 
     tensor = np.empty((n_groups, n_heights, n_series), dtype=float)
     for g in range(n_groups):
@@ -445,7 +607,7 @@ def _error_tensor(sampled_hierarchies: SampledHierarchies, em: ErrorMetrics,
             # A fully specified index selects exactly one row -> shape (1, n_series).
             values = index_matrix[g, h].values(em)
             tensor[g, h, :] = np.asarray(values, dtype=float).reshape(-1)[:n_series]
-    return tensor, ts_columns
+    return tensor, ts_columns, sequence_ids
 
 
 def _combine_p_values(p_values: np.ndarray, combine_method: CombineMethod) -> tuple[float, float]:
@@ -467,6 +629,115 @@ def _combine_p_values(p_values: np.ndarray, combine_method: CombineMethod) -> tu
     return float(statistic), float(combined_p)
 
 
+def _per_axis_trend_test(
+    test_fun,
+    sampled_hierarchies: SampledHierarchies,
+    em: ErrorMetrics,
+    *,
+    axis: Literal['series', 'hierarchy'],
+    forecast_type: str = RECONCILED_FORECASTS,
+    granularity: str | Aggregation,
+    error_metric: str,
+    method: str = 'shr',
+    trend_type: TrendType = TrendType.DECREASING,
+    combine_method: CombineMethod = CombineMethod.STOUFFER,
+    alpha: float = 0.05,
+    epsilons: list[float] = [],
+    **kwargs
+) -> PerAxisTrendTestResult:
+    """Shared engine for the per-series and per-hierarchy trend tests.
+
+    Builds the ``(n_sequences, n_heights, n_series)`` error tensor and then runs
+    one trend test per unit along the requested ``axis``, before combining the
+    resulting p-values.
+
+    - ``axis='series'``: one test per series on its ``(n_sequences, n_heights)``
+      matrix. The sampled hierarchies act as independent replicate sequences and
+      heights are the ordered positions. This is the classic ``per_series_test``.
+    - ``axis='hierarchy'``: the transpose. One test per hierarchy sequence on its
+      ``(n_series, n_heights)`` matrix; the series act as replicates and heights
+      remain the ordered positions.
+
+    In both cases the trend runs along the height axis; only the replicate axis
+    differs. The per-unit p-values are combined with Fisher/Stouffer and the
+    fraction of individually significant units is reported.
+
+    Returns a :class:`PerSeriesTrendTestResult` (``axis='series'``) or a
+    :class:`PerHierarchyTrendTestResult` (``axis='hierarchy'``); the
+    ``per_series`` frame is indexed by series name or hierarchy sequence id
+    respectively.
+    """
+    tensor, ts_columns, sequence_ids = _error_tensor(
+        sampled_hierarchies, em,
+        forecast_type=forecast_type, granularity=granularity,
+        error_metric=error_metric, method=method,
+    )
+    n_sequences, _n_heights, n_series = tensor.shape
+
+    if axis == 'series':
+        n_units = n_series
+        index = pd.Index(ts_columns, name='series')
+        result_cls: type[PerAxisTrendTestResult] = PerSeriesTrendTestResult
+        # For unit s: (n_sequences, n_heights) -> replicates = sequences.
+        def unit_matrix(u: int) -> np.ndarray:
+            return tensor[:, :, u]
+    elif axis == 'hierarchy':
+        n_units = n_sequences
+        index = pd.Index(sequence_ids, name='sequence_id')
+        result_cls = PerHierarchyTrendTestResult
+        # For unit g: (n_series, n_heights) -> replicates = series (transpose).
+        def unit_matrix(u: int) -> np.ndarray:
+            return tensor[u, :, :].T
+    else:
+        raise ValueError(f"axis must be 'series' or 'hierarchy', got {axis!r}")
+
+    p_values = np.full(n_units, np.nan)
+    statistics = np.full(n_units, np.nan)
+    for u in range(n_units):
+        matrix = unit_matrix(u)  # (n_replicates, n_heights)
+        eps = epsilons[u] if len(epsilons) > 0 else None
+        # Skip units with any non-finite cell: the rank tests cannot rank NaNs.
+        if not np.all(np.isfinite(matrix)):
+            mask = ~np.isnan(matrix).any(axis=1)
+            matrix = matrix[mask]
+            if isinstance(eps, Iterable):
+                eps = eps[mask]
+
+        # Need at least 2 positions and 2 replicate sequences.
+        if matrix.shape[0] < 2 or matrix.shape[1] < 2:
+            continue
+        res = test_fun(matrix, alpha=alpha, trend_type=trend_type, epsilon=eps, **kwargs)
+        p_values[u] = res.p_value
+        statistics[u] = res.statistic
+
+    valid = np.isfinite(p_values)
+    n_valid = int(valid.sum())
+    if n_valid == 0:
+        raise ValueError(f"No {axis} yielded a valid trend test")
+
+    valid_p = p_values[valid]
+    fraction_significant = float(np.mean(valid_p < alpha))
+    statistic, combined_p = _combine_p_values(valid_p, combine_method)
+
+    per_unit = pd.DataFrame(
+        {'p_value': p_values, 'statistic': statistics},
+        index=index,
+    )
+
+    return result_cls(
+        statistic=statistic,
+        p_value=combined_p,
+        significant=combined_p < alpha,
+        method=TEST_METHOD_NAMES.get(test_fun, getattr(test_fun, '__name__', str(test_fun))),
+        trend_type=trend_type,
+        combine_method=combine_method,
+        n_series=n_units,
+        n_valid=n_valid,
+        fraction_significant=fraction_significant,
+        per_unit=per_unit,
+    )
+
+
 def per_series_test(
     test_fun,
     sampled_hierarchies: SampledHierarchies,
@@ -479,20 +750,24 @@ def per_series_test(
     trend_type: TrendType = TrendType.DECREASING,
     combine_method: CombineMethod = CombineMethod.STOUFFER,
     alpha: float = 0.05,
+    epsilons: list[float] = [],
     **kwargs
 ) -> PerSeriesTrendTestResult:
-    """Per-series Page's L trend test across sampled hierarchies, with combined p-value.
+    """Per-series trend test across sampled hierarchies, with combined p-value.
 
     This is the raw-value counterpart of ``l_test_stats``. Instead of collapsing
     all series into one aggregate (e.g. the winsorized mean) *before* running a
-    single Page's L test, this:
+    single trend test, this:
 
     1. Builds a ``(n_sequences, n_heights, n_series)`` tensor of the raw
        per-series errors for the selected slice.
-    2. Runs Page's L on each series' own ``(n_sequences, n_heights)`` matrix,
+    2. Runs ``test_fun`` on each series' own ``(n_sequences, n_heights)`` matrix,
        using the sampled hierarchies as independent replicate sequences.
     3. Combines the per-series p-values with Fisher or Stouffer, and also
        reports the fraction of individually significant series.
+
+    Runs ``S`` tests (one per series), each seeing ``n_sequences x n_heights``
+    sample values.
 
     Parameters
     ----------
@@ -513,125 +788,56 @@ def per_series_test(
     -------
     PerSeriesTrendTestResult
     """
-    tensor, ts_columns = _error_tensor(
-        sampled_hierarchies, em,
+    return _per_axis_trend_test(
+        test_fun, sampled_hierarchies, em,
+        axis='series',
         forecast_type=forecast_type, granularity=granularity,
         error_metric=error_metric, method=method,
-    )
-    n_series = tensor.shape[2]
-
-    p_values = np.full(n_series, np.nan)
-    statistics = np.full(n_series, np.nan)
-    for s in range(n_series):
-        matrix = tensor[:, :, s]  # (n_sequences, n_heights)
-        # Skip series with any non-finite cell: Page's L cannot rank NaNs.
-        if not np.all(np.isfinite(matrix)):
-            continue
-        # Page's L needs at least 2 positions and 2 replicate sequences.
-        if matrix.shape[0] < 2 or matrix.shape[1] < 2:
-            continue
-        res = test_fun(matrix, alpha=alpha, trend_type=trend_type, **kwargs)
-        p_values[s] = res.p_value
-        statistics[s] = res.statistic
-
-    valid = np.isfinite(p_values)
-    n_valid = int(valid.sum())
-    if n_valid == 0:
-        raise ValueError("No series yielded a valid per-series trend test ")
-
-    valid_p = p_values[valid]
-    fraction_significant = float(np.mean(valid_p < alpha))
-    statistic, combined_p = _combine_p_values(valid_p, combine_method)
-
-    per_series = pd.DataFrame(
-        {'p_value': p_values, 'statistic': statistics},
-        index=pd.Index(ts_columns, name='series'),
-    )
-
-    return PerSeriesTrendTestResult(
-        statistic=statistic,
-        p_value=combined_p,
-        significant=combined_p < alpha,
-        method="Per-series Page's L trend test",
-        trend_type=trend_type,
-        combine_method=combine_method,
-        n_series=n_series,
-        n_valid=n_valid,
-        fraction_significant=fraction_significant,
-        per_series=per_series,
+        trend_type=trend_type, combine_method=combine_method,
+        alpha=alpha, epsilons=epsilons, **kwargs
     )
 
 
-@dataclass
-class PerSeriesTrendTestResultStoreGranularity:
-    decreasing: dict[TestMethod, PerSeriesTrendTestResult] = field(default_factory=dict)
-    increasing: dict[TestMethod, PerSeriesTrendTestResult] = field(default_factory=dict)
-    stagnant: dict[TestMethod, PerSeriesTrendTestResult] = field(default_factory=dict)
+def per_hierarchy_test(
+    test_fun,
+    sampled_hierarchies: SampledHierarchies,
+    em: ErrorMetrics,
+    *,
+    forecast_type: str = RECONCILED_FORECASTS,
+    granularity: str | Aggregation,
+    error_metric: str,
+    method: str = 'shr',
+    trend_type: TrendType = TrendType.DECREASING,
+    combine_method: CombineMethod = CombineMethod.STOUFFER,
+    alpha: float = 0.05,
+    epsilons: list[float] = [],
+    **kwargs
+) -> PerHierarchyTrendTestResult:
+    """Per-hierarchy trend test across series, with combined p-value.
 
-@dataclass
-class PerSeriesTrendTestResultStore:
-    top: PerSeriesTrendTestResultStoreGranularity
-    bottom: PerSeriesTrendTestResultStoreGranularity
+    The mirror image of :func:`per_series_test`. After the same
+    ``(n_sequences, n_heights, n_series)`` error tensor is built, the series and
+    sequence axes are transposed: instead of one test per series (with the
+    sampled hierarchies as replicates), this runs one test per hierarchy
+    sequence on its ``(n_series, n_heights)`` matrix, using the individual series
+    as the replicate axis. The trend still runs along the height axis.
 
+    Runs ``n_sequences`` tests (one per hierarchy), each seeing
+    ``n_series x n_heights`` sample values, then combines those p-values.
 
-def run_comprehensive_per_series_tests(sh: SampledHierarchies, em: ErrorMetrics, error_metric: str):
-    if not isinstance(sh, SingleStepHierarchies):
-        return PerSeriesTrendTestResultStore(
-            top=PerSeriesTrendTestResultStoreGranularity(
-                    increasing={
-                        "page l":  per_series_test(page_trend_test, sh, em, granularity=TOP_LEVEL, error_metric='nrmse', trend_type=TrendType.INCREASING),
-                        "slope t": per_series_test(slope_ttest, sh, em, granularity=TOP_LEVEL, error_metric='nrmse', trend_type=TrendType.INCREASING)
-                    },
-                    decreasing={
-                        "page l":  per_series_test(page_trend_test, sh, em, granularity=TOP_LEVEL, error_metric='nrmse', trend_type=TrendType.DECREASING),
-                        "slope t": per_series_test(slope_ttest, sh, em, granularity=TOP_LEVEL, error_metric='nrmse', trend_type=TrendType.DECREASING)
-                    },
-                    stagnant={
-                        "slope t": per_series_test(slope_ttest, sh, em, granularity=TOP_LEVEL, error_metric='nrmse', trend_type=TrendType.STAGNANT)
-                    }
-                ),
-            bottom=PerSeriesTrendTestResultStoreGranularity(
-                    increasing={
-                        "page l":  per_series_test(page_trend_test, sh, em, granularity=BOTTOM_LEVEL, error_metric='nrmse', trend_type=TrendType.INCREASING),
-                        "slope t": per_series_test(slope_ttest, sh, em, granularity=BOTTOM_LEVEL, error_metric='nrmse', trend_type=TrendType.INCREASING)
-                    },
-                    decreasing={
-                        "page l":  per_series_test(page_trend_test, sh, em, granularity=BOTTOM_LEVEL, error_metric='nrmse', trend_type=TrendType.DECREASING),
-                        "slope t": per_series_test(slope_ttest, sh, em, granularity=BOTTOM_LEVEL, error_metric='nrmse', trend_type=TrendType.DECREASING)
-                    },
-                    stagnant={
-                        "slope t": per_series_test(slope_ttest, sh, em, granularity=BOTTOM_LEVEL, error_metric='nrmse', trend_type=TrendType.STAGNANT)
-                    }
-                )
-        )
-    else:
-        return PerSeriesTrendTestResultStore(
-            top=PerSeriesTrendTestResultStoreGranularity(
-                    increasing={
-                        "wilcoxon":  per_series_test(wilcoxon_test, sh, em, granularity=TOP_LEVEL, error_metric='nrmse', trend_type=TrendType.INCREASING),
-                        "sign": per_series_test(sign_test, sh, em, granularity=TOP_LEVEL, error_metric='nrmse', trend_type=TrendType.INCREASING)
-                    },
-                    decreasing={
-                        "wilcoxon":  per_series_test(wilcoxon_test, sh, em, granularity=TOP_LEVEL, error_metric='nrmse', trend_type=TrendType.DECREASING),
-                        "sign": per_series_test(sign_test, sh, em, granularity=TOP_LEVEL, error_metric='nrmse', trend_type=TrendType.DECREASING)
-                    },
-                    stagnant={
-                        "wilcoxon": per_series_test(wilcoxon_test, sh, em, granularity=TOP_LEVEL, error_metric='nrmse', trend_type=TrendType.STAGNANT),
-                        "sign": per_series_test(sign_test, sh, em, granularity=TOP_LEVEL, error_metric='nrmse', trend_type=TrendType.STAGNANT)
-                    }
-                ),
-            bottom=PerSeriesTrendTestResultStoreGranularity(
-                    increasing={
-                        "wilcoxon":  per_series_test(wilcoxon_test, sh, em, granularity=BOTTOM_LEVEL, error_metric='nrmse', trend_type=TrendType.INCREASING),
-                        "sign": per_series_test(sign_test, sh, em, granularity=BOTTOM_LEVEL, error_metric='nrmse', trend_type=TrendType.INCREASING)
-                    },
-                    decreasing={
-                        "wilcoxon":  per_series_test(wilcoxon_test, sh, em, granularity=BOTTOM_LEVEL, error_metric='nrmse', trend_type=TrendType.DECREASING),
-                        "sign": per_series_test(sign_test, sh, em, granularity=BOTTOM_LEVEL, error_metric='nrmse', trend_type=TrendType.DECREASING)
-                    },
-                    stagnant={
-                        "wilcoxon": per_series_test(wilcoxon_test, sh, em, granularity=BOTTOM_LEVEL, error_metric='nrmse', trend_type=TrendType.STAGNANT),
-                        "sign": per_series_test(sign_test, sh, em, granularity=BOTTOM_LEVEL, error_metric='nrmse', trend_type=TrendType.STAGNANT)
-                    }
-                ),
-        )
+    Parameters are identical to :func:`per_series_test`. The returned
+    ``per_series`` frame is indexed by hierarchy sequence id rather than series
+    name.
+
+    Returns
+    -------
+    PerHierarchyTrendTestResult
+    """
+    return _per_axis_trend_test(
+        test_fun, sampled_hierarchies, em,
+        axis='hierarchy',
+        forecast_type=forecast_type, granularity=granularity,
+        error_metric=error_metric, method=method,
+        trend_type=trend_type, combine_method=combine_method,
+        alpha=alpha, epsilons=epsilons, **kwargs
+    )

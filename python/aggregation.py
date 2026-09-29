@@ -105,6 +105,9 @@ class Aggregation:
 
         return False
 
+    def __hash__(self) -> int:
+        return hash(self.hierarchy_name)
+
 class ArbitraryAggregation(Aggregation):
     def __init__(self, hierarchy_name: str, summing_row: np.ndarray | list):
         summing_row = np.array(summing_row, dtype=np.int32)

@@ -21,3 +21,5 @@ doc/paper/.old
 doc/paper/**.pdf
 
 misc/
+
+artifacts/

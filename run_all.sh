@@ -11,7 +11,7 @@ set -e
 CONFIG="${CONFIG:-config.json}"
 NOTEBOOK="${NOTEBOOK:-nb/m_datasets/pipeline.ipynb}"
 
-DATASETS=("web-traffic" "M5" "M4")
+DATASETS=("M4" "M5" "web-traffic" "sim")
 MODELS=("AutoETS" "AutoARIMA" "Prophet")
 
 for dataset in "${DATASETS[@]}"; do

@@ -12,7 +12,7 @@ def load_config(filename) -> 'Config':
     return cfg
 
 class DatasetConfig(BaseModel):
-    NAME: Literal['web-traffic', 'M5', 'M4'] = Field(alias='name')
+    NAME: Literal['web-traffic', 'M5', 'M4', 'sim'] = Field(alias='name')
     START: int = Field(alias='start', default=0)
     END: int = Field(alias='end', default=-1)
 
@@ -26,6 +26,7 @@ class AggregationsConfig(BaseModel):
 class SingleStepConfig(BaseModel):
     BASE_PERIOD: int = Field(alias='base_period')
     REPEATS: int = Field(alias='single_step_repeats')
+    PARTITION: int = Field(alias='partition', default=0)
     SUBSET: int = 0
 
     def model_post_init(self, context: Any) -> None:
@@ -50,6 +51,8 @@ class Config(BaseModel):
         self.HORIZON = self.LEVELS.BASE_PERIOD * self.HORIZON_RATIO
         if self.is_single_step_hierarchies():
             self.MASTER_FOLDER = f'period={self.LEVELS.BASE_PERIOD}_horizon={self.HORIZON}_single_step_repeats={self.LEVELS.SUBSET}'
+            if self.LEVELS.PARTITION:
+                self.MASTER_FOLDER += f'_partition={self.LEVELS.PARTITION}'
         else:
             self.MASTER_FOLDER = f'period={self.LEVELS.BASE_PERIOD}_horizon={self.HORIZON}_subset={self.LEVELS.SUBSET}_d={self.LEVELS.DIFF}_maxh={self.LEVELS.MAX_H}_sequences={self.LEVELS.SEQUENCES}'
         self.FOLDER = f'{self.MASTER_FOLDER}/{self.DATASET.NAME}/{self.MODEL}'

@@ -333,7 +333,7 @@ def plot_per_series_pvalues(result, alpha: float = 0.05, bins: int = 20):
         alpha: significance threshold to draw and to summarise against.
         bins: number of histogram bins across [0, 1].
     """
-    p = np.asarray(result.per_series['p_value'], dtype=float)
+    p = np.asarray(result.per_unit['p_value'], dtype=float)
     p = p[np.isfinite(p)]
 
     fig = px.histogram(
