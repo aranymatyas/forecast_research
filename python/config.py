@@ -22,15 +22,14 @@ class AggregationsConfig(BaseModel):
     DIFF: int = Field(alias='diff')
     MAX_H: int = Field(alias='max_height', default=0)
     SEQUENCES: int = Field(alias='sequences', default=10)
+    MASTER_FOLDER: str = Field(alias='folder', default='')
 
 class SingleStepConfig(BaseModel):
     BASE_PERIOD: int = Field(alias='base_period')
     REPEATS: int = Field(alias='single_step_repeats')
     PARTITION: int = Field(alias='partition', default=0)
     SUBSET: int = 0
-
-    def model_post_init(self, context: Any) -> None:
-        self.SUBSET = self.REPEATS
+    MASTER_FOLDER: str = Field(alias='folder', default='')
 
 class Config(BaseModel):
     SEED: int = Field(alias='seed', default=42)

@@ -1,0 +1,3 @@
+base_period: 7
+single_step_repeats: 0
+folder: period=7_horizon=7_single_step_repeats=0

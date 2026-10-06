@@ -65,9 +65,15 @@ def reconcile_calculate_serialize_error_metrics(hierarchies: list[TemporalHierar
         errors = ErrorMetrics(h)
         errors.calc_error_metrics([BOTTOM_LEVEL, TOP_LEVEL])
         errors.save(filename_func(h))
+        return h
 
+    reconciled = {}
     with tqdm(total=len(hierarchies), desc="Reconcile", disable=not verbose) as pbar:
-        for _ in Parallel(n_jobs=n_jobs, return_as="generator")(
+        for h in Parallel(n_jobs=n_jobs, return_as="generator")(
             delayed(_do_reco_calc)(h) for h in hierarchies
         ):
+            reconciled[h.name] = h
             pbar.update(1)
+
+    for h in hierarchies:
+        h.copy_data(reconciled[h.name])

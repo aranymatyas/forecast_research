@@ -23,3 +23,6 @@ doc/paper/**.pdf
 misc/
 
 artifacts/
+config.json
+nb/dead_ends
+.kiro

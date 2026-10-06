@@ -13,8 +13,8 @@ BASE_PERIOD = int(os.getenv("BASE_PERIOD", 28))
 
 def fetch_dataset_m4(format: TimeSeriesFormat = "wide") -> pd.DataFrame:
     """ Return train dataset of M4 competition daily time series. Small dataset. Artificial dates. All time series shifted to bottom, lots missing. """
-    path = kagglehub.dataset_download("yogesh94/m4-forecasting-competition-dataset", output_dir="data/m4")
-    X = pd.read_csv(path + '/Daily-train.csv')
+    # path = kagglehub.dataset_download("yogesh94/m4-forecasting-competition-dataset", output_dir="data/m4")
+    X = pd.read_csv('data/m4/Daily-train.csv')
 
     # Rows are series, columns are time steps. Transpose so rows = time steps.
     X = X.set_index('V1').T

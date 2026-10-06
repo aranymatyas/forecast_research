@@ -1,0 +1,6 @@
+base_period: 7
+subset: 0
+diff: 3
+max_height: 6
+sequences: 30
+folder: period=7_horizon=7_subset=0_d=3_maxh=6_sequences=30
